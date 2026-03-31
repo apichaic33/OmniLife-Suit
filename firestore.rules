@@ -1,0 +1,267 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Fields: uid, email, displayName, photoURL, role, createdAt
+    //
+    // Collection: tasks
+    // Fields: title, category, priority, due, completed, uid, createdAt
+    //
+    // Collection: fitness_logs
+    // Fields: title, type, duration, intensity, completed, calories, protein, uid, createdAt
+    //
+    // Collection: fitness_goals
+    // Fields: type, targetWeight, currentWeight, startDate, endDate, uid, createdAt
+    //
+    // Collection: assets
+    // Fields: name, category, value, change, type, uid, createdAt
+    //
+    // Collection: debts
+    // Fields: title, amount, interestRate, dueDate, uid, createdAt
+    //
+    // Collection: trades
+    // Fields: pair, type, price, amount, date, status, uid, createdAt
+    //
+    // Collection: projects
+    // Fields: title, category, progress, tasks, completedTasks, due, status, uid, createdAt
+    //
+    // Collection: plants
+    // Fields: name, method, status, health, planted, harvest, projectId, isExperimental, uid, createdAt
+    //
+    // Collection: transactions
+    // Fields: title, category, amount, date, type, uid, createdAt
+    //
+    // Collection: routines
+    // Fields: title, frequency, time, completedToday, lastCompleted, uid, createdAt
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "Q.apichai@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidString(field, min, max) {
+      return request.resource.data[field] is string && 
+             request.resource.data[field].size() >= min && 
+             request.resource.data[field].size() <= max;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidTimestamp(field) {
+      return request.resource.data[field] is timestamp || (request.resource.data[field] is string && request.resource.data[field].matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$"));
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'email', 'createdAt']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'displayName', 'photoURL', 'role', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             isValidEmail(data.email) &&
+             (data.role == 'user' || data.role == 'admin');
+    }
+
+    function isValidTask(data) {
+      return hasRequiredFields(['title', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'category', 'priority', 'due', 'completed', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidFitnessLog(data) {
+      return hasRequiredFields(['title', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'type', 'duration', 'intensity', 'completed', 'calories', 'protein', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidFitnessGoal(data) {
+      return hasRequiredFields(['type', 'targetWeight', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['type', 'targetWeight', 'currentWeight', 'startDate', 'endDate', 'uid', 'createdAt']) &&
+             (data.type == 'muscle' || data.type == 'fat_loss' || data.type == 'maintenance') &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidAsset(data) {
+      return hasRequiredFields(['name', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'category', 'value', 'change', 'type', 'uid', 'createdAt']) &&
+             isValidString('name', 1, 100) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidDebt(data) {
+      return hasRequiredFields(['title', 'amount', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'amount', 'interestRate', 'dueDate', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidTrade(data) {
+      return hasRequiredFields(['pair', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['pair', 'type', 'price', 'amount', 'date', 'status', 'uid', 'createdAt']) &&
+             isValidString('pair', 1, 20) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidProject(data) {
+      return hasRequiredFields(['title', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'category', 'progress', 'tasks', 'completedTasks', 'due', 'status', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidPlant(data) {
+      return hasRequiredFields(['name', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'method', 'status', 'health', 'planted', 'harvest', 'projectId', 'isExperimental', 'uid', 'createdAt']) &&
+             isValidString('name', 1, 100) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidTransaction(data) {
+      return hasRequiredFields(['title', 'amount', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'category', 'amount', 'date', 'type', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidRoutine(data) {
+      return hasRequiredFields(['title', 'frequency', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'frequency', 'time', 'completedToday', 'lastCompleted', 'uid', 'createdAt']) &&
+             isValidString('title', 1, 100) &&
+             (data.frequency == 'daily' || data.frequency == 'weekly') &&
+             data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role; // Prevent self-role escalation
+    }
+
+    match /tasks/{taskId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidTask(request.resource.data);
+      allow update: if isDocOwner() && isValidTask(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /fitness_logs/{logId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidFitnessLog(request.resource.data);
+      allow update: if isDocOwner() && isValidFitnessLog(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /fitness_goals/{goalId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidFitnessGoal(request.resource.data);
+      allow update: if isDocOwner() && isValidFitnessGoal(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /assets/{assetId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidAsset(request.resource.data);
+      allow update: if isDocOwner() && isValidAsset(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /debts/{debtId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidDebt(request.resource.data);
+      allow update: if isDocOwner() && isValidDebt(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /trades/{tradeId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidTrade(request.resource.data);
+      allow update: if isDocOwner() && isValidTrade(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidProject(request.resource.data);
+      allow update: if isDocOwner() && isValidProject(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /plants/{plantId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidPlant(request.resource.data);
+      allow update: if isDocOwner() && isValidPlant(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /transactions/{txId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
+      allow update: if isDocOwner() && isValidTransaction(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /routines/{routineId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidRoutine(request.resource.data);
+      allow update: if isDocOwner() && isValidRoutine(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    // Default Deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}
