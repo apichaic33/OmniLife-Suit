@@ -122,6 +122,10 @@
         "amount": { "type": "number" },
         "date": { "type": "string" },
         "type": { "type": "string", "enum": ["income", "expense"] },
+        "debtId": { "type": "string", "description": "Optional link to a debt for payment tracking." },
+        "businessId": { "type": "string", "description": "Optional link to a business or income source." },
+        "taxAmount": { "type": "number" },
+        "isTaxDeductible": { "type": "boolean" },
         "uid": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
@@ -133,13 +137,30 @@
       "type": "object",
       "properties": {
         "title": { "type": "string" },
-        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["Mortgage", "Car Loan", "Credit Card", "Personal Loan", "Installment", "Other"] },
+        "totalAmount": { "type": "number" },
+        "remainingBalance": { "type": "number" },
         "interestRate": { "type": "number" },
+        "monthlyPayment": { "type": "number" },
         "dueDate": { "type": "string" },
         "uid": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["title", "amount", "uid", "createdAt"]
+      "required": ["title", "totalAmount", "remainingBalance", "uid", "createdAt"]
+    },
+    "Business": {
+      "title": "Business / Income Source",
+      "description": "A business, rental property, or side hustle.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Rental", "E-commerce", "Service", "Investment", "Other"] },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "uid", "createdAt"]
     },
     "FitnessGoal": {
       "title": "Fitness Goal",
@@ -183,6 +204,7 @@
     "/trades/{tradeId}": { "schema": "Trade", "description": "Trading history logs." },
     "/projects/{projectId}": { "schema": "Project", "description": "Project management data." },
     "/plants/{plantId}": { "schema": "Plant", "description": "Agriculture and planting data." },
-    "/transactions/{txId}": { "schema": "Transaction", "description": "Financial transaction history." }
+    "/transactions/{txId}": { "schema": "Transaction", "description": "Financial transaction history." },
+    "/businesses/{businessId}": { "schema": "Business", "description": "Business and income sources." }
   }
 }

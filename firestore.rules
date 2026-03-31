@@ -22,7 +22,7 @@ service cloud.firestore {
     // Fields: name, category, value, change, type, uid, createdAt
     //
     // Collection: debts
-    // Fields: title, amount, interestRate, dueDate, uid, createdAt
+    // Fields: title, type, totalAmount, remainingBalance, interestRate, monthlyPayment, dueDate, uid, createdAt
     //
     // Collection: trades
     // Fields: pair, type, price, amount, date, status, uid, createdAt
@@ -34,10 +34,13 @@ service cloud.firestore {
     // Fields: name, method, status, health, planted, harvest, projectId, isExperimental, uid, createdAt
     //
     // Collection: transactions
-    // Fields: title, category, amount, date, type, uid, createdAt
+    // Fields: title, category, amount, date, type, debtId, businessId, taxAmount, isTaxDeductible, uid, createdAt
     //
     // Collection: routines
     // Fields: title, frequency, time, completedToday, lastCompleted, uid, createdAt
+    //
+    // Collection: businesses
+    // Fields: name, type, description, status, uid, createdAt
     //
     // ===============================================================
 
@@ -126,9 +129,16 @@ service cloud.firestore {
     }
 
     function isValidDebt(data) {
-      return hasRequiredFields(['title', 'amount', 'uid', 'createdAt']) &&
-             hasOnlyAllowedFields(['title', 'amount', 'interestRate', 'dueDate', 'uid', 'createdAt']) &&
+      return hasRequiredFields(['title', 'totalAmount', 'remainingBalance', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'type', 'totalAmount', 'remainingBalance', 'interestRate', 'monthlyPayment', 'dueDate', 'uid', 'createdAt']) &&
              isValidString('title', 1, 200) &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidBusiness(data) {
+      return hasRequiredFields(['name', 'type', 'status', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'type', 'description', 'status', 'uid', 'createdAt']) &&
+             isValidString('name', 1, 100) &&
              data.uid == request.auth.uid;
     }
 
@@ -155,7 +165,7 @@ service cloud.firestore {
 
     function isValidTransaction(data) {
       return hasRequiredFields(['title', 'amount', 'uid', 'createdAt']) &&
-             hasOnlyAllowedFields(['title', 'category', 'amount', 'date', 'type', 'uid', 'createdAt']) &&
+             hasOnlyAllowedFields(['title', 'category', 'amount', 'date', 'type', 'debtId', 'businessId', 'taxAmount', 'isTaxDeductible', 'uid', 'createdAt']) &&
              isValidString('title', 1, 200) &&
              data.uid == request.auth.uid;
     }
@@ -247,6 +257,14 @@ service cloud.firestore {
       allow read: if isDocOwner() || isAdmin();
       allow create: if isAuthenticated() && isValidTransaction(request.resource.data);
       allow update: if isDocOwner() && isValidTransaction(request.resource.data) && 
+                      request.resource.data.uid == resource.data.uid;
+      allow delete: if isDocOwner() || isAdmin();
+    }
+
+    match /businesses/{businessId} {
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if isAuthenticated() && isValidBusiness(request.resource.data);
+      allow update: if isDocOwner() && isValidBusiness(request.resource.data) && 
                       request.resource.data.uid == resource.data.uid;
       allow delete: if isDocOwner() || isAdmin();
     }
