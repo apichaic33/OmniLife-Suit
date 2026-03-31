@@ -683,7 +683,9 @@ export default function Finance() {
           <h3 className="font-bold text-lg mb-8">Liabilities & Debts</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {debts.map((debt) => {
-              const progress = ((debt.totalAmount - debt.remainingBalance) / debt.totalAmount) * 100;
+              const progress = debt.totalAmount > 0 
+                ? ((debt.totalAmount - debt.remainingBalance) / debt.totalAmount) * 100 
+                : 0;
               return (
                 <div key={debt.id} className="p-8 bg-rose-50/30 rounded-3xl border border-rose-100/50 relative group">
                   <button 
