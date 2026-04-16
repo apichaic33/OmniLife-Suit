@@ -23,7 +23,7 @@ export default function TradePage() {
   const [prices, setPrices]           = useState<Record<string, PriceData>>({});
   const [priceLoading, setPriceLoading] = useState(false);
   const [lastUpdated, setLastUpdated]   = useState<Date | null>(null);
-  const [form, setForm]               = useState({ pair: '', type: 'Buy', price: '', amount: '' });
+  const [form, setForm]               = useState({ pair: '', type: 'Buy', price: '', amount: '', sentiment: 'neutral', notes: '' });
 
   useEffect(() => {
     const q = query(collection(db, 'trades'), orderBy('createdAt', 'desc'), limit(100));
@@ -80,7 +80,7 @@ export default function TradePage() {
     });
     toast.success('เพิ่ม Trade แล้ว');
     setShowAddForm(false);
-    setForm({ pair: '', type: 'Buy', price: '', amount: '' });
+    setForm({ pair: '', type: 'Buy', price: '', amount: '', sentiment: 'neutral', notes: '' });
   };
 
   const handleClose = async (t: Trade) => {
@@ -105,7 +105,7 @@ export default function TradePage() {
   };
 
   if (showSim) {
-    const seed = buildTradeSeed(trades, simPair || undefined);
+    const seed = buildTradeSeed(trades, simPair || undefined, Object.keys(prices).length > 0 ? prices : undefined);
     return (
       <MiroFishSimulator
         title={`Trade Simulation${simPair ? ` — ${simPair}` : ''}`}
@@ -180,6 +180,33 @@ export default function TradePage() {
                 <option>Buy</option><option>Sell</option>
               </select>
             </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Sentiment</label>
+              <div className="flex gap-1">
+                {(['bullish','neutral','bearish'] as const).map(s => (
+                  <button key={s} onClick={() => setForm(p => ({ ...p, sentiment: s }))}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium capitalize transition"
+                    style={{
+                      background: form.sentiment === s
+                        ? (s === 'bullish' ? '#22c55e33' : s === 'bearish' ? '#ef444433' : '#6366f133')
+                        : 'var(--color-bg)',
+                      color: form.sentiment === s
+                        ? (s === 'bullish' ? '#22c55e' : s === 'bearish' ? '#ef4444' : '#818cf8')
+                        : 'var(--color-muted)',
+                      border: '1px solid var(--color-border)',
+                    }}>
+                    {s === 'bullish' ? '🟢' : s === 'bearish' ? '🔴' : '⚪'} {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Journal / Notes (optional)</label>
+            <input value={form.notes} onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+              placeholder="เหตุผลที่เทรด, setup ที่เห็น, ความรู้สึก..."
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+              style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
           </div>
           <div className="flex gap-2">
             <button onClick={handleAdd} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--color-accent)' }}>Save</button>
@@ -307,7 +334,7 @@ export default function TradePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--color-surface)' }}>
-                {['Closed', 'Pair', 'Type', 'Entry', 'Exit', 'Amount', 'P&L'].map(h => (
+                {['Closed', 'Pair', 'Type', 'Entry', 'Exit', 'Amount', 'P&L', 'Sentiment / Notes'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -327,6 +354,20 @@ export default function TradePage() {
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{t.amount}</td>
                   <td className="px-4 py-3 font-semibold" style={{ color: (t.pnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                     {(t.pnl ?? 0) >= 0 ? '+' : ''}{(t.pnl ?? 0).toLocaleString()}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      {t.sentiment && (
+                        <span className="text-xs px-1.5 py-0.5 rounded w-fit"
+                          style={{
+                            background: t.sentiment === 'bullish' ? '#22c55e22' : t.sentiment === 'bearish' ? '#ef444422' : '#6366f122',
+                            color: t.sentiment === 'bullish' ? '#22c55e' : t.sentiment === 'bearish' ? '#ef4444' : '#818cf8',
+                          }}>
+                          {t.sentiment === 'bullish' ? '🟢' : t.sentiment === 'bearish' ? '🔴' : '⚪'} {t.sentiment}
+                        </span>
+                      )}
+                      {t.notes && <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{t.notes}</span>}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -443,6 +484,45 @@ export default function TradePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Sentiment Analysis */}
+              {(() => {
+                const sentimentData = [
+                  { key: 'bullish', label: '🟢 Bullish', color: '#22c55e' },
+                  { key: 'bearish', label: '🔴 Bearish', color: '#ef4444' },
+                  { key: 'neutral', label: '⚪ Neutral', color: '#818cf8' },
+                ].map(s => ({
+                  ...s,
+                  count: trades.filter(t => t.sentiment === s.key).length,
+                  winRate: (() => {
+                    const sentTrades = closed.filter(t => t.sentiment === s.key);
+                    if (!sentTrades.length) return null;
+                    return Math.round(sentTrades.filter(t => (t.pnl ?? 0) > 0).length / sentTrades.length * 100);
+                  })(),
+                })).filter(s => s.count > 0);
+
+                if (!sentimentData.length) return null;
+                return (
+                  <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                    <div className="px-4 py-3 text-sm font-medium border-b" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', borderColor: 'var(--color-border)' }}>
+                      Sentiment Analysis
+                    </div>
+                    <div className="grid grid-cols-3 divide-x" style={{ borderColor: 'var(--color-border)' }}>
+                      {sentimentData.map(s => (
+                        <div key={s.key} className="px-4 py-3 text-center">
+                          <div className="text-lg font-bold" style={{ color: s.color }}>{s.count}</div>
+                          <div className="text-xs" style={{ color: 'var(--color-muted)' }}>{s.label} trades</div>
+                          {s.winRate !== null && (
+                            <div className="text-xs mt-1 font-medium" style={{ color: s.winRate >= 50 ? '#22c55e' : '#ef4444' }}>
+                              {s.winRate}% win rate
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* P&L by pair */}
               {pnlByPair.length > 0 && (

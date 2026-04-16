@@ -101,27 +101,116 @@ export async function generateReport(projectId: string, simulationId: string): P
 }
 
 // Build seed text from Trade data (Firestore → markdown)
-export function buildTradeSeed(trades: any[], pair?: string): string {
+export function buildTradeSeed(
+  trades: any[],
+  pair?: string,
+  prices?: Record<string, { usd: number; usd_24h_change: number }>
+): string {
   const filtered = pair ? trades.filter(t => t.pair === pair) : trades;
-  const lines = filtered.map(t =>
-    `| ${t.date || t.createdAt} | ${t.type} | ${t.pair} | ${t.price} | ${t.amount} | ${t.status} |`
-  );
+  const open     = filtered.filter(t => t.status === 'Open');
+  const closed   = filtered.filter(t => t.status === 'Closed');
+  const totalPnl = closed.reduce((s, t) => s + (t.pnl || 0), 0);
+  const wins     = closed.filter(t => (t.pnl || 0) > 0).length;
 
-  return `# Trade Analysis Report
+  const tradeLines = filtered.map(t => {
+    const base   = t.pair?.split('/')[0]?.toUpperCase();
+    const curPrice = prices?.[base]?.usd;
+    const uPnl = t.status === 'Open' && curPrice
+      ? ((t.type === 'Buy' ? curPrice - t.price : t.price - curPrice) * t.amount).toFixed(2)
+      : t.pnl ?? '—';
+    const note = t.notes ? ` [Note: ${t.notes}]` : '';
+    const mood = t.sentiment ? ` (${t.sentiment})` : '';
+    return `| ${t.date} | ${t.type} | ${t.pair} | ${t.price} | ${t.amount} | ${t.status} | ${uPnl}${mood}${note} |`;
+  });
 
-## Trading Data
-${pair ? `Pair: ${pair}` : 'All Pairs'}
-Period: Recent ${filtered.length} trades
+  const marketSection = prices && Object.keys(prices).length > 0
+    ? `## Current Market Prices (${new Date().toLocaleDateString()})
+${Object.entries(prices).map(([sym, p]) =>
+  `- ${sym}/USDT: $${p.usd.toLocaleString()} (24h: ${p.usd_24h_change >= 0 ? '+' : ''}${p.usd_24h_change.toFixed(2)}%)`
+).join('\n')}\n`
+    : '';
 
-## Trade History
-| Date | Type | Pair | Price | Amount | Status |
-|------|------|------|-------|--------|--------|
-${lines.join('\n')}
+  const sentimentCounts = filtered.reduce((acc, t) => {
+    if (t.sentiment) acc[t.sentiment] = (acc[t.sentiment] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  return `# Trade Portfolio Analysis
+
+## Summary
+${pair ? `Pair: ${pair}` : 'All Pairs'} | Total trades: ${filtered.length}
+Open positions: ${open.length} | Closed: ${closed.length}
+Realized P&L: ${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+Win rate: ${closed.length > 0 ? Math.round((wins / closed.length) * 100) : 0}% (${wins}W / ${closed.length - wins}L)
+${Object.keys(sentimentCounts).length > 0 ? `Trader sentiment history: ${Object.entries(sentimentCounts).map(([k,v]) => `${k}:${v}`).join(', ')}` : ''}
+
+${marketSection}## Trade Log
+| Date | Type | Pair | Entry Price | Amount | Status | P&L / Sentiment / Notes |
+|------|------|------|-------------|--------|--------|--------------------------|
+${tradeLines.join('\n')}
 
 ## Prediction Request
-Analyze market sentiment based on this trading history.
-Should I continue with the current strategy or adjust my position?
-What are the key risks and opportunities in the next 1-2 weeks?
+Analyze this trading portfolio including current market prices and trader sentiment.
+- What is the overall portfolio health and risk level?
+- Based on sentiment patterns, what does the trader's psychology suggest?
+- Should I hold, reduce, or increase positions given current market conditions?
+- What are the key risks and opportunities in the next 1-2 weeks?
+`;
+}
+
+// Build seed from combined Trade + Assets portfolio
+export function buildPortfolioSeed(
+  trades: any[],
+  assets: any[],
+  prices?: Record<string, { usd: number; usd_24h_change: number }>
+): string {
+  const open        = trades.filter(t => t.status === 'Open');
+  const closed      = trades.filter(t => t.status === 'Closed');
+  const totalPnl    = closed.reduce((s, t) => s + (t.pnl || 0), 0);
+  const totalAssets = assets.reduce((s, a) => s + (a.value || 0), 0);
+
+  const unrealizedPnl = open.reduce((s, t) => {
+    const base = t.pair?.split('/')[0]?.toUpperCase();
+    const cur  = prices?.[base]?.usd;
+    if (!cur) return s;
+    return s + (t.type === 'Buy' ? cur - t.price : t.price - cur) * t.amount;
+  }, 0);
+
+  const marketSection = prices && Object.keys(prices).length > 0
+    ? `## Live Market Prices
+${Object.entries(prices).map(([sym, p]) =>
+  `- ${sym}: $${p.usd.toLocaleString()} (${p.usd_24h_change >= 0 ? '+' : ''}${p.usd_24h_change.toFixed(2)}% 24h)`
+).join('\n')}\n`
+    : '';
+
+  return `# Full Portfolio Analysis — OmniLife Suit
+
+## Portfolio Overview
+- Total Asset Value: ฿${totalAssets.toLocaleString()}
+- Realized Trading P&L: ${totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+- Unrealized Trading P&L: ${unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
+- Open Positions: ${open.length}
+
+${marketSection}## Assets
+${assets.map(a => `- ${a.name} (${a.category}): ฿${a.value?.toLocaleString()} ${a.change} (${a.type})`).join('\n')}
+
+## Open Trade Positions
+${open.map(t => {
+  const base = t.pair?.split('/')[0]?.toUpperCase();
+  const cur  = prices?.[base]?.usd;
+  const uPnl = cur ? ((t.type === 'Buy' ? cur - t.price : t.price - cur) * t.amount).toFixed(2) : '?';
+  return `- ${t.type} ${t.pair}: entry ${t.price}, size ${t.amount}, unrealized P&L: ${uPnl}`;
+}).join('\n')}
+
+## Recent Closed Trades (Last 10)
+${closed.slice(0, 10).map(t => `- ${t.closedAt || t.date}: ${t.type} ${t.pair} → P&L: ${(t.pnl || 0) >= 0 ? '+' : ''}${t.pnl || 0}${t.notes ? ` | ${t.notes}` : ''}`).join('\n')}
+
+## Prediction Request
+Analyze this complete portfolio combining traditional assets and crypto trading positions.
+- What is the total portfolio risk exposure?
+- How correlated are the crypto positions with overall asset performance?
+- What rebalancing strategy would optimize risk-adjusted returns?
+- Which positions should be reduced or increased given current market conditions?
 `;
 }
 

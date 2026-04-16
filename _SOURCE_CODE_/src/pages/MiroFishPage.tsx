@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { checkMiroFishHealth, getSimulationHistory, buildTradeSeed, buildFinanceSeed } from '../lib/mirofish';
-import { Fish, Wifi, WifiOff, TrendingUp, Wallet, Clock, ChevronRight } from 'lucide-react';
+import { checkMiroFishHealth, getSimulationHistory, buildTradeSeed, buildFinanceSeed, buildPortfolioSeed } from '../lib/mirofish';
+import { fetchPrices } from '../lib/market';
+import { Fish, Wifi, WifiOff, TrendingUp, Wallet, Clock, ChevronRight, LayoutDashboard } from 'lucide-react';
 import MiroFishSimulator from '../components/MiroFishSimulator';
 
-type SimMode = null | 'trade' | 'finance';
+type SimMode = null | 'trade' | 'finance' | 'portfolio';
 
 export default function MiroFishPage() {
   const [online, setOnline]     = useState<boolean | null>(null);
@@ -25,6 +26,20 @@ export default function MiroFishPage() {
     setSeedText(buildTradeSeed(trades));
     setSimTitle('Trade Sentiment Simulation');
     setSimMode('trade');
+  };
+
+  const handlePortfolioSimulate = async () => {
+    const [tradeSnap, assetSnap] = await Promise.all([
+      getDocs(query(collection(db, 'trades'), orderBy('createdAt', 'desc'), limit(50))),
+      getDocs(query(collection(db, 'assets'), limit(20))),
+    ]);
+    const trades = tradeSnap.docs.map(d => d.data());
+    const assets = assetSnap.docs.map(d => d.data());
+    const pairs  = [...new Set(trades.map((t: any) => t.pair).filter(Boolean))];
+    const prices = await fetchPrices(pairs);
+    setSeedText(buildPortfolioSeed(trades, assets, prices));
+    setSimTitle('Full Portfolio Simulation');
+    setSimMode('portfolio');
   };
 
   const handleFinanceSimulate = async () => {
@@ -77,7 +92,7 @@ export default function MiroFishPage() {
       )}
 
       {/* Quick Simulate */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <button
           onClick={handleTradeSimulate}
           disabled={!online}
@@ -114,6 +129,26 @@ export default function MiroFishPage() {
             พยากรณ์กระแสเงินสดจาก transactions, debts และ businesses
           </p>
           <div className="flex items-center gap-1 text-xs" style={{ color: '#818cf8' }}>
+            Start simulation <ChevronRight size={12} />
+          </div>
+        </button>
+
+        <button
+          onClick={handlePortfolioSimulate}
+          disabled={!online}
+          className="rounded-xl p-5 border text-left hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ background: 'var(--color-surface)', borderColor: '#f59e0b33' }}
+        >
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-lg" style={{ background: '#f59e0b22' }}>
+              <LayoutDashboard size={20} style={{ color: '#f59e0b' }} />
+            </div>
+            <span className="font-semibold" style={{ color: 'var(--color-text)' }}>Portfolio</span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: 'var(--color-muted)' }}>
+            รวม Trade + Assets + ราคาตลาดจริง
+          </p>
+          <div className="flex items-center gap-1 text-xs" style={{ color: '#f59e0b' }}>
             Start simulation <ChevronRight size={12} />
           </div>
         </button>
