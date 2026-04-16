@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { buildTradeSeed } from '../lib/mirofish';
+import { fetchPrices, baseCurrency, formatChange, type PriceData } from '../lib/market';
 import type { Trade } from '../types';
-import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import MiroFishSimulator from '../components/MiroFishSimulator';
@@ -18,7 +19,10 @@ export default function TradePage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [closingId, setClosingId]     = useState<string | null>(null);
   const [closePrice, setClosePrice]   = useState('');
-  const [tab, setTab]                 = useState<'positions' | 'history' | 'analytics'>('positions');
+  const [tab, setTab]                 = useState<'positions' | 'history' | 'analytics' | 'market'>('positions');
+  const [prices, setPrices]           = useState<Record<string, PriceData>>({});
+  const [priceLoading, setPriceLoading] = useState(false);
+  const [lastUpdated, setLastUpdated]   = useState<Date | null>(null);
   const [form, setForm]               = useState({ pair: '', type: 'Buy', price: '', amount: '' });
 
   useEffect(() => {
@@ -29,6 +33,23 @@ export default function TradePage() {
     }, () => setLoading(false));
     return unsub;
   }, []);
+
+  const refreshPrices = useCallback(async () => {
+    if (trades.length === 0) return;
+    setPriceLoading(true);
+    const data = await fetchPrices(trades.map(t => t.pair));
+    setPrices(data);
+    setLastUpdated(new Date());
+    setPriceLoading(false);
+  }, [trades]);
+
+  // Auto-fetch prices when trades load, then every 60 seconds
+  useEffect(() => {
+    if (trades.length === 0) return;
+    refreshPrices();
+    const interval = setInterval(refreshPrices, 60000);
+    return () => clearInterval(interval);
+  }, [trades.length]);
 
   // ── Derived data ────────────────────────────────────────────
   const open   = trades.filter(t => t.status === 'Open');
@@ -169,7 +190,7 @@ export default function TradePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 rounded-lg w-fit" style={{ background: 'var(--color-surface)' }}>
-        {(['positions', 'history', 'analytics'] as const).map(t => (
+        {(['positions', 'history', 'analytics', 'market'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className="px-3 py-1.5 rounded-md text-sm capitalize transition"
             style={{ background: tab === t ? 'var(--color-accent)' : 'transparent', color: tab === t ? '#fff' : 'var(--color-muted)' }}>
@@ -203,7 +224,7 @@ export default function TradePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--color-surface)' }}>
-                {['Date', 'Pair', 'Type', 'Entry Price', 'Amount', 'Value', 'Action'].map(h => (
+                {['Date', 'Pair', 'Type', 'Entry', 'Current', 'Unrealized P&L', 'Action'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -224,9 +245,33 @@ export default function TradePage() {
                     </span>
                   </td>
                   <td className="px-4 py-3" style={{ color: 'var(--color-text)' }}>{t.price.toLocaleString()}</td>
-                  <td className="px-4 py-3" style={{ color: 'var(--color-text)' }}>{t.amount}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text)' }}>
-                    {(t.price * t.amount).toLocaleString()}
+                  <td className="px-4 py-3">
+                    {(() => {
+                      const p = prices[baseCurrency(t.pair)];
+                      if (!p) return <span style={{ color: 'var(--color-muted)' }}>—</span>;
+                      return (
+                        <div>
+                          <div className="font-medium text-xs" style={{ color: 'var(--color-text)' }}>{p.usd.toLocaleString()}</div>
+                          <div className="text-xs" style={{ color: p.usd_24h_change >= 0 ? '#22c55e' : '#ef4444' }}>
+                            {formatChange(p.usd_24h_change)}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-xs">
+                    {(() => {
+                      const p = prices[baseCurrency(t.pair)];
+                      if (!p) return <span style={{ color: 'var(--color-muted)' }}>—</span>;
+                      const uPnl = t.type === 'Buy'
+                        ? (p.usd - t.price) * t.amount
+                        : (t.price - p.usd) * t.amount;
+                      return (
+                        <span style={{ color: uPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                          {uPnl >= 0 ? '+' : ''}{uPnl.toFixed(2)}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3">
                     {closingId === t.id ? (
@@ -287,6 +332,78 @@ export default function TradePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── MARKET TAB ── */}
+      {tab === 'market' && (
+        <div className="space-y-3">
+          {/* Header + Refresh */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm" style={{ color: 'var(--color-muted)' }}>
+              {lastUpdated ? `Updated: ${lastUpdated.toLocaleTimeString()}` : 'Fetching prices...'}
+            </span>
+            <button onClick={refreshPrices} disabled={priceLoading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition disabled:opacity-50"
+              style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+              <RefreshCw size={12} className={priceLoading ? 'animate-spin' : ''} /> Refresh
+            </button>
+          </div>
+
+          {pairs.length === 0 ? (
+            <div className="text-sm text-center py-12" style={{ color: 'var(--color-muted)' }}>
+              เพิ่ม trade ก่อนเพื่อดูราคาตลาด
+            </div>
+          ) : (
+            <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ background: 'var(--color-surface)' }}>
+                    {['Pair', 'Current Price (USD)', '24h Change', 'Open Positions', 'Total Exposure'].map(h => (
+                      <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pairs.map(pair => {
+                    const base = baseCurrency(pair);
+                    const p    = prices[base];
+                    const openForPair = open.filter(t => t.pair === pair);
+                    const exposure    = openForPair.reduce((s, t) => s + t.price * t.amount, 0);
+                    return (
+                      <tr key={pair} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
+                        <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text)' }}>{pair}</td>
+                        <td className="px-4 py-3">
+                          {priceLoading && !p
+                            ? <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-muted)' }} />
+                            : p
+                              ? <span className="font-medium" style={{ color: 'var(--color-text)' }}>${p.usd.toLocaleString()}</span>
+                              : <span style={{ color: 'var(--color-muted)' }}>ไม่รองรับ</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          {p ? (
+                            <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full w-fit"
+                              style={{ background: p.usd_24h_change >= 0 ? '#22c55e22' : '#ef444422', color: p.usd_24h_change >= 0 ? '#22c55e' : '#ef4444' }}>
+                              {p.usd_24h_change >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                              {formatChange(p.usd_24h_change)}
+                            </span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{openForPair.length}</td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text)' }}>
+                          {exposure > 0 ? `$${exposure.toLocaleString()}` : '—'}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            ราคาจาก CoinGecko · อัปเดตทุก 60 วินาที · รองรับ crypto เท่านั้น
+          </p>
         </div>
       )}
 

@@ -181,6 +181,7 @@
   },
   "active": "5081e6e35efff72c",
   "lastOpenFiles": [
+    "_SOURCE_CODE_/src/lib/market.ts",
     "_SOURCE_CODE_/dist/index.js",
     "_SOURCE_CODE_/dist/index.html",
     "_SOURCE_CODE_/dist/index.css",
@@ -195,7 +196,6 @@
     "_SOURCE_CODE_/node_modules/node-fetch/@types/index.d.ts",
     "_SOURCE_CODE_/node_modules/node-fetch/@types",
     "_SOURCE_CODE_/node_modules/motion/mini/package.json",
-    "_SOURCE_CODE_/node_modules/motion/mini",
     "_SOURCE_CODE_/node_modules/body-parser/node_modules/debug/CHANGELOG.md",
     "_SOURCE_CODE_/node_modules/vite/node_modules/@esbuild/darwin-x64/README.md",
     "_SOURCE_CODE_/node_modules/finalhandler/node_modules/debug/README.md",
