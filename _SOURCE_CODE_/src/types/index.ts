@@ -7,7 +7,10 @@ export interface Trade {
   price: number;
   amount: number;
   date: string;
-  status: string;
+  status: 'Open' | 'Closed';
+  closePrice?: number;
+  closedAt?: string;
+  pnl?: number;
   uid: string;
   createdAt: string;
 }
