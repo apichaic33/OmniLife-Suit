@@ -1,0 +1,7 @@
+{
+  "name": "OmniLife Suit",
+  "description": "A comprehensive personal management app covering tasks, fitness, assets, projects, agriculture, and finance with a robust notification system.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

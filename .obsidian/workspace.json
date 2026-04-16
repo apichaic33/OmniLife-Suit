@@ -1,0 +1,230 @@
+{
+  "main": {
+    "id": "65c9bc7caa68ace1",
+    "type": "split",
+    "children": [
+      {
+        "id": "7bf66c09a05a28e9",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "5081e6e35efff72c",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "มุมมองกราฟ"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "11b00e1951c74bd0",
+    "type": "split",
+    "children": [
+      {
+        "id": "910fc8cc4dd846a0",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c8a9127499a52cf2",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "File explorer"
+            }
+          },
+          {
+            "id": "70daee83efccf093",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "ค้นหา"
+            }
+          },
+          {
+            "id": "a95a7db58cac3b03",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "บุ๊กมาร์ก"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "23000631ae85d29b",
+    "type": "split",
+    "children": [
+      {
+        "id": "020d9f61b98c10fb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "b4f7e835902f8273",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "README.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "แบ็คลิงค์ของ README"
+            }
+          },
+          {
+            "id": "1d583279db9a1f43",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "README.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "ลิงค์ขาออกของ README"
+            }
+          },
+          {
+            "id": "c09daf2dd574d80e",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "แท็ก"
+            }
+          },
+          {
+            "id": "d44d9198caf14e54",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "คุณสมบัติทั้งหมด"
+            }
+          },
+          {
+            "id": "aa76be053c345cab",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "README.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "โครงเรื่องของ README"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:เปิด quick switcher": false,
+      "graph:เปิดมุมมองกราฟ": false,
+      "canvas:สร้างผืนผ้าใบใหม่": false,
+      "daily-notes:เปิดโน้ตของวันนี้": false,
+      "templates:แทรกเทมเพลต": false,
+      "command-palette:เปิดกระดานคำสั่ง": false,
+      "bases:สร้างฐานใหม่": false
+    }
+  },
+  "active": "5081e6e35efff72c",
+  "lastOpenFiles": [
+    "_SOURCE_CODE_/dist/index.js",
+    "_SOURCE_CODE_/dist/index.html",
+    "_SOURCE_CODE_/dist/index.css",
+    "_SOURCE_CODE_/dist",
+    "_SOURCE_CODE_/src/components/ErrorBoundary.tsx",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/readme.md",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/index.js",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/license.md",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/component.json",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/README.md",
+    "_SOURCE_CODE_/node_modules/send/node_modules/debug/CHANGELOG.md",
+    "_SOURCE_CODE_/node_modules/node-fetch/@types/index.d.ts",
+    "_SOURCE_CODE_/node_modules/node-fetch/@types",
+    "_SOURCE_CODE_/node_modules/motion/mini/package.json",
+    "_SOURCE_CODE_/node_modules/motion/mini",
+    "_SOURCE_CODE_/node_modules/body-parser/node_modules/debug/CHANGELOG.md",
+    "_SOURCE_CODE_/node_modules/vite/node_modules/@esbuild/darwin-x64/README.md",
+    "_SOURCE_CODE_/node_modules/finalhandler/node_modules/debug/README.md",
+    "_SOURCE_CODE_/node_modules/finalhandler/node_modules/debug/CHANGELOG.md",
+    "_SOURCE_CODE_/node_modules/express/node_modules/ms/readme.md",
+    "_SOURCE_CODE_/node_modules/express/node_modules/ms/license.md",
+    "_SOURCE_CODE_/node_modules/setprototypeof/README.md",
+    "_SOURCE_CODE_/node_modules/get-tsconfig/README.md",
+    "_SOURCE_CODE_/node_modules/mime-db/README.md",
+    "_SOURCE_CODE_/node_modules/mime-db/HISTORY.md",
+    "_SOURCE_CODE_/node_modules/media-typer/HISTORY.md",
+    "_SOURCE_CODE_/node_modules/electron-to-chromium/README.md",
+    "_SOURCE_CODE_/node_modules/fsevents/README.md",
+    "_SOURCE_CODE_/node_modules/on-finished/HISTORY.md",
+    "_SOURCE_CODE_/node_modules/object-inspect/CHANGELOG.md",
+    "_SOURCE_CODE_/node_modules/emoji-regex/README.md",
+    "_SOURCE_CODE_/node_modules/side-channel-map/README.md",
+    "_SOURCE_CODE_/node_modules/react/README.md",
+    "_SOURCE_CODE_/node_modules/recharts/AGENTS.md",
+    "_SOURCE_CODE_/node_modules/recharts/CONTRIBUTING.md",
+    "_SOURCE_CODE_/node_modules/recharts/README.md",
+    "_SOURCE_CODE_/node_modules/date-fns/docs/logo.svg",
+    "_SOURCE_CODE_/node_modules/date-fns/docs/logotype.svg",
+    "raw/MiroFish-main/MiroFish-main/node_modules/concurrently/docs/demo.gif",
+    "raw/MiroFish-main/MiroFish-main/frontend/src/assets/logo/MiroFish_logo_left.jpeg",
+    "raw/MiroFish-main/MiroFish-main/frontend/src/assets/logo/MiroFish_logo_compressed.jpeg",
+    "raw/MiroFish-main/MiroFish-main/static/image/shanda_logo.png",
+    "raw/MiroFish-main/MiroFish-main/static/image/MiroFish_logo_compressed.jpeg",
+    "raw/MiroFish-main/MiroFish-main/static/image/MiroFish_logo.jpeg",
+    "raw/MiroFish-main/MiroFish-main/frontend/public/icon.png"
+  ]
+}

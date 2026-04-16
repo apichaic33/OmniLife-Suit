@@ -1,0 +1,210 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user-specific settings and profile information.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID from Firebase Auth." },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string", "format": "uri" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task or habit to be completed.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "due": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "uid", "createdAt"]
+    },
+    "FitnessLog": {
+      "title": "Fitness Log",
+      "description": "Workout or meal log.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "type": { "type": "string" },
+        "duration": { "type": "string" },
+        "intensity": { "type": "string" },
+        "completed": { "type": "boolean" },
+        "calories": { "type": "number" },
+        "protein": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "uid", "createdAt"]
+    },
+    "Asset": {
+      "title": "Asset",
+      "description": "A tracked asset or collectible.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "value": { "type": "number" },
+        "change": { "type": "string" },
+        "type": { "type": "string", "enum": ["up", "down"] },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "uid", "createdAt"]
+    },
+    "Trade": {
+      "title": "Trade",
+      "description": "A log of a trade transaction.",
+      "type": "object",
+      "properties": {
+        "pair": { "type": "string" },
+        "type": { "type": "string", "enum": ["Buy", "Sell"] },
+        "price": { "type": "number" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["pair", "uid", "createdAt"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "A high-level project with progress tracking.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "progress": { "type": "number" },
+        "tasks": { "type": "number" },
+        "completedTasks": { "type": "number" },
+        "due": { "type": "string" },
+        "status": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "uid", "createdAt"]
+    },
+    "Plant": {
+      "title": "Plant",
+      "description": "A plant being grown or an experiment.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "method": { "type": "string" },
+        "status": { "type": "string" },
+        "health": { "type": "number" },
+        "planted": { "type": "string" },
+        "harvest": { "type": "string" },
+        "projectId": { "type": "string", "description": "Optional link to a project." },
+        "isExperimental": { "type": "boolean" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "uid", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "A financial income or expense transaction.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "debtId": { "type": "string", "description": "Optional link to a debt for payment tracking." },
+        "businessId": { "type": "string", "description": "Optional link to a business or income source." },
+        "taxAmount": { "type": "number" },
+        "isTaxDeductible": { "type": "boolean" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "amount", "uid", "createdAt"]
+    },
+    "Debt": {
+      "title": "Debt",
+      "description": "A financial debt or liability.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["Mortgage", "Car Loan", "Credit Card", "Personal Loan", "Installment", "Other"] },
+        "totalAmount": { "type": "number" },
+        "remainingBalance": { "type": "number" },
+        "interestRate": { "type": "number" },
+        "monthlyPayment": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "totalAmount", "remainingBalance", "uid", "createdAt"]
+    },
+    "Business": {
+      "title": "Business / Income Source",
+      "description": "A business, rental property, or side hustle.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["Rental", "E-commerce", "Service", "Investment", "Other"] },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["Active", "Inactive"] },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "uid", "createdAt"]
+    },
+    "FitnessGoal": {
+      "title": "Fitness Goal",
+      "description": "A fitness target (muscle, fat loss, etc).",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["muscle", "fat_loss", "maintenance"] },
+        "targetWeight": { "type": "number" },
+        "currentWeight": { "type": "number" },
+        "startDate": { "type": "string" },
+        "endDate": { "type": "string" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["type", "targetWeight", "uid", "createdAt"]
+    },
+    "Routine": {
+      "title": "Routine",
+      "description": "A recurring daily or weekly routine.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "frequency": { "type": "string", "enum": ["daily", "weekly"] },
+        "time": { "type": "string" },
+        "completedToday": { "type": "boolean" },
+        "lastCompleted": { "type": "string", "format": "date-time" },
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "frequency", "uid", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "User", "description": "User profile documents." },
+    "/tasks/{taskId}": { "schema": "Task", "description": "User tasks and habits." },
+    "/routines/{routineId}": { "schema": "Routine", "description": "Recurring daily/weekly routines." },
+    "/fitness_logs/{logId}": { "schema": "FitnessLog", "description": "Fitness and diet logs." },
+    "/fitness_goals/{goalId}": { "schema": "FitnessGoal", "description": "Fitness goals." },
+    "/assets/{assetId}": { "schema": "Asset", "description": "Tracked assets." },
+    "/debts/{debtId}": { "schema": "Debt", "description": "Financial debts." },
+    "/trades/{tradeId}": { "schema": "Trade", "description": "Trading history logs." },
+    "/projects/{projectId}": { "schema": "Project", "description": "Project management data." },
+    "/plants/{plantId}": { "schema": "Plant", "description": "Agriculture and planting data." },
+    "/transactions/{txId}": { "schema": "Transaction", "description": "Financial transaction history." },
+    "/businesses/{businessId}": { "schema": "Business", "description": "Business and income sources." }
+  }
+}
