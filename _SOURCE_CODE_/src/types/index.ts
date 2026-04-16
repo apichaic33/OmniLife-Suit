@@ -11,6 +11,8 @@ export interface Trade {
   closePrice?: number;
   closedAt?: string;
   pnl?: number;
+  stopLoss?: number;
+  takeProfit?: number;
   sentiment?: 'bullish' | 'bearish' | 'neutral';
   notes?: string;
   uid: string;

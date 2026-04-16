@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { buildTradeSeed } from '../lib/mirofish';
 import { fetchPrices, baseCurrency, formatChange, type PriceData } from '../lib/market';
 import type { Trade } from '../types';
-import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw, ShieldAlert, Bell } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import MiroFishSimulator from '../components/MiroFishSimulator';
@@ -23,7 +23,13 @@ export default function TradePage() {
   const [prices, setPrices]           = useState<Record<string, PriceData>>({});
   const [priceLoading, setPriceLoading] = useState(false);
   const [lastUpdated, setLastUpdated]   = useState<Date | null>(null);
-  const [form, setForm]               = useState({ pair: '', type: 'Buy', price: '', amount: '', sentiment: 'neutral', notes: '' });
+  const [form, setForm]               = useState({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' });
+  const [portfolioSize, setPortfolioSize] = useState<number>(() => {
+    const saved = localStorage.getItem('omnilife_portfolio_size');
+    return saved ? +saved : 0;
+  });
+  const [showPortfolioInput, setShowPortfolioInput] = useState(false);
+  const [alertedIds, setAlertedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const q = query(collection(db, 'trades'), orderBy('createdAt', 'desc'), limit(100));
@@ -41,7 +47,21 @@ export default function TradePage() {
     setPrices(data);
     setLastUpdated(new Date());
     setPriceLoading(false);
-  }, [trades]);
+
+    // SL/TP alerts for open positions
+    trades.filter(t => t.status === 'Open').forEach(t => {
+      const base = baseCurrency(t.pair);
+      const cur  = data[base]?.usd;
+      if (!cur || alertedIds.has(t.id!)) return;
+      if (t.stopLoss && (t.type === 'Buy' ? cur <= t.stopLoss : cur >= t.stopLoss)) {
+        toast.error(`🔴 Stop Loss hit! ${t.pair} @ $${cur.toLocaleString()} (SL: ${t.stopLoss})`, { duration: 10000 });
+        setAlertedIds(prev => new Set(prev).add(t.id!));
+      } else if (t.takeProfit && (t.type === 'Buy' ? cur >= t.takeProfit : cur <= t.takeProfit)) {
+        toast.success(`🎯 Take Profit hit! ${t.pair} @ $${cur.toLocaleString()} (TP: ${t.takeProfit})`, { duration: 10000 });
+        setAlertedIds(prev => new Set(prev).add(t.id!));
+      }
+    });
+  }, [trades, alertedIds]);
 
   // Auto-fetch prices when trades load, then every 60 seconds
   useEffect(() => {
@@ -73,14 +93,17 @@ export default function TradePage() {
   const handleAdd = async () => {
     if (!form.pair || !form.price || !form.amount) return toast.error('กรอกข้อมูลให้ครบ');
     await addDoc(collection(db, 'trades'), {
-      ...form, price: +form.price, amount: +form.amount,
+      ...form,
+      price: +form.price, amount: +form.amount,
+      stopLoss:   form.stopLoss   ? +form.stopLoss   : null,
+      takeProfit: form.takeProfit ? +form.takeProfit : null,
       status: 'Open', uid: DEMO_UID,
       date: new Date().toISOString().split('T')[0],
       createdAt: serverTimestamp(),
     });
     toast.success('เพิ่ม Trade แล้ว');
     setShowAddForm(false);
-    setForm({ pair: '', type: 'Buy', price: '', amount: '', sentiment: 'neutral', notes: '' });
+    setForm({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' });
   };
 
   const handleClose = async (t: Trade) => {
@@ -155,6 +178,38 @@ export default function TradePage() {
         ))}
       </div>
 
+      {/* Portfolio Size & Risk */}
+      <div className="flex items-center gap-3 p-3 rounded-xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+        <ShieldAlert size={16} style={{ color: '#f59e0b' }} />
+        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>Portfolio Size:</span>
+        {showPortfolioInput ? (
+          <input type="number" autoFocus
+            defaultValue={portfolioSize || ''}
+            placeholder="ใส่ขนาด portfolio (USD)"
+            onBlur={e => { const v = +e.target.value; setPortfolioSize(v); localStorage.setItem('omnilife_portfolio_size', String(v)); setShowPortfolioInput(false); }}
+            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            className="px-2 py-1 rounded text-xs outline-none w-36"
+            style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+        ) : (
+          <button onClick={() => setShowPortfolioInput(true)} className="text-xs font-medium" style={{ color: portfolioSize ? 'var(--color-text)' : '#f59e0b' }}>
+            {portfolioSize ? `$${portfolioSize.toLocaleString()}` : 'ตั้งค่า →'}
+          </button>
+        )}
+        {portfolioSize > 0 && (() => {
+          const totalRisk = open.reduce((s, t) => {
+            if (!t.stopLoss) return s;
+            return s + (Math.abs(t.price - t.stopLoss) * t.amount / portfolioSize * 100);
+          }, 0);
+          return totalRisk > 0 ? (
+            <span className="ml-auto text-xs font-medium px-2 py-0.5 rounded-full"
+              style={{ background: totalRisk > 10 ? '#ef444422' : totalRisk > 5 ? '#f59e0b22' : '#22c55e22',
+                       color:      totalRisk > 10 ? '#ef4444'   : totalRisk > 5 ? '#f59e0b'   : '#22c55e' }}>
+              Total Risk: {totalRisk.toFixed(1)}%
+            </span>
+          ) : null;
+        })()}
+      </div>
+
       {/* Add Form */}
       {showAddForm && (
         <div className="rounded-xl p-4 border space-y-3" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -179,6 +234,20 @@ export default function TradePage() {
                 style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
                 <option>Buy</option><option>Sell</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Stop Loss</label>
+              <input type="number" placeholder="0.00" value={form.stopLoss}
+                onChange={e => setForm(p => ({ ...p, stopLoss: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid #ef444444' }} />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Take Profit</label>
+              <input type="number" placeholder="0.00" value={form.takeProfit}
+                onChange={e => setForm(p => ({ ...p, takeProfit: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid #22c55e44' }} />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Sentiment</label>
@@ -251,7 +320,7 @@ export default function TradePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--color-surface)' }}>
-                {['Date', 'Pair', 'Type', 'Entry', 'Current', 'Unrealized P&L', 'Action'].map(h => (
+                {['Date', 'Pair', 'Type', 'Entry', 'SL / TP', 'Current', 'Unrealized P&L', 'Risk', 'Action'].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -272,6 +341,13 @@ export default function TradePage() {
                     </span>
                   </td>
                   <td className="px-4 py-3" style={{ color: 'var(--color-text)' }}>{t.price.toLocaleString()}</td>
+                  <td className="px-4 py-3">
+                    <div className="text-xs space-y-0.5">
+                      {t.stopLoss   && <div style={{ color: '#ef4444' }}>SL: {t.stopLoss.toLocaleString()}</div>}
+                      {t.takeProfit && <div style={{ color: '#22c55e' }}>TP: {t.takeProfit.toLocaleString()}</div>}
+                      {!t.stopLoss && !t.takeProfit && <span style={{ color: 'var(--color-muted)' }}>—</span>}
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     {(() => {
                       const p = prices[baseCurrency(t.pair)];
@@ -297,6 +373,25 @@ export default function TradePage() {
                         <span style={{ color: uPnl >= 0 ? '#22c55e' : '#ef4444' }}>
                           {uPnl >= 0 ? '+' : ''}{uPnl.toFixed(2)}
                         </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
+                    {(() => {
+                      if (!t.stopLoss || !portfolioSize) return <span className="text-xs" style={{ color: 'var(--color-muted)' }}>—</span>;
+                      const riskPct = Math.abs(t.price - t.stopLoss) * t.amount / portfolioSize * 100;
+                      const rr = t.takeProfit
+                        ? (Math.abs(t.takeProfit - t.price) / Math.abs(t.price - t.stopLoss)).toFixed(1)
+                        : null;
+                      return (
+                        <div className="text-xs space-y-0.5">
+                          <span className="px-1.5 py-0.5 rounded font-medium"
+                            style={{ background: riskPct > 5 ? '#ef444422' : riskPct > 2 ? '#f59e0b22' : '#22c55e22',
+                                     color:      riskPct > 5 ? '#ef4444'   : riskPct > 2 ? '#f59e0b'   : '#22c55e' }}>
+                            {riskPct.toFixed(1)}%
+                          </span>
+                          {rr && <div style={{ color: 'var(--color-muted)' }}>R:R {rr}</div>}
+                        </div>
                       );
                     })()}
                   </td>
@@ -484,6 +579,36 @@ export default function TradePage() {
                   </div>
                 </div>
               </div>
+
+              {/* Risk Overview */}
+              {portfolioSize > 0 && open.some(t => t.stopLoss) && (
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                  <div className="px-4 py-3 text-sm font-medium border-b flex items-center gap-2"
+                    style={{ background: 'var(--color-surface)', color: 'var(--color-text)', borderColor: 'var(--color-border)' }}>
+                    <ShieldAlert size={14} style={{ color: '#f59e0b' }} /> Risk Overview
+                    <span className="ml-auto text-xs" style={{ color: 'var(--color-muted)' }}>Portfolio: ${portfolioSize.toLocaleString()}</span>
+                  </div>
+                  {open.filter(t => t.stopLoss).map(t => {
+                    const riskPct = Math.abs(t.price - t.stopLoss!) * t.amount / portfolioSize * 100;
+                    const rr = t.takeProfit
+                      ? (Math.abs(t.takeProfit - t.price) / Math.abs(t.price - t.stopLoss!)).toFixed(1)
+                      : null;
+                    return (
+                      <div key={t.id} className="px-4 py-3 border-t flex items-center gap-3" style={{ borderColor: 'var(--color-border)' }}>
+                        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t.pair}</span>
+                        <span className="text-xs" style={{ color: '#ef4444' }}>SL: {t.stopLoss?.toLocaleString()}</span>
+                        {t.takeProfit && <span className="text-xs" style={{ color: '#22c55e' }}>TP: {t.takeProfit.toLocaleString()}</span>}
+                        {rr && <span className="text-xs px-1.5 py-0.5 rounded" style={{ background: '#6366f122', color: '#818cf8' }}>R:R {rr}</span>}
+                        <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
+                          style={{ background: riskPct > 5 ? '#ef444422' : riskPct > 2 ? '#f59e0b22' : '#22c55e22',
+                                   color:      riskPct > 5 ? '#ef4444'   : riskPct > 2 ? '#f59e0b'   : '#22c55e' }}>
+                          {riskPct.toFixed(1)}% risk
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Sentiment Analysis */}
               {(() => {
