@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
+import { db } from '../lib/firebase';
 import {
   calcTradeStats,
   calcFibLevels,
@@ -58,13 +58,11 @@ function StatsTab() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) { setLoading(false); return; }
     getDocs(query(collection(db, 'trades'), orderBy('createdAt', 'desc')))
       .then(snap => {
         const trades = snap.docs
           .map(d => d.data() as { uid: string; pnl?: number; status: string })
-          .filter(t => t.uid === uid);
+          .filter(t => t.uid === 'demo-user');
         setStats(calcTradeStats(trades));
       })
       .finally(() => setLoading(false));
@@ -726,13 +724,11 @@ function AdvancedMathTab() {
   const [rfRate, setRfRate] = useState('4');   // risk-free annual %
 
   useEffect(() => {
-    const uid = auth.currentUser?.uid;
-    if (!uid) { setLoadingTrades(false); return; }
     getDocs(query(collection(db, 'trades'), orderBy('createdAt', 'desc')))
       .then(snap => {
         const closed = snap.docs
           .map(d => d.data() as { uid: string; pnl?: number; status: string })
-          .filter(t => t.uid === uid && t.status === 'Closed' && t.pnl !== undefined)
+          .filter(t => t.uid === 'demo-user' && t.status === 'Closed' && t.pnl !== undefined)
           .map(t => ({ pnl: t.pnl! }));
         setTradeData(closed);
       })

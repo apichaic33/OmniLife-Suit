@@ -29,15 +29,17 @@ export default function AgriculturePage() {
 
   const addPlant = async () => {
     if (!form.name.trim()) return toast.error('กรอกชื่อพืช');
-    await addDoc(collection(db, 'plants'), {
-      ...form,
-      health: +form.health || 80,
-      uid: UID,
-      createdAt: serverTimestamp(),
-    });
-    setForm({ name: '', method: '', status: 'Seedling', health: '80', planted: '', harvest: '', isExperimental: false });
-    setShowForm(false);
-    toast.success('เพิ่มพืชแล้ว');
+    try {
+      await addDoc(collection(db, 'plants'), {
+        ...form,
+        health: +form.health || 80,
+        uid: UID,
+        createdAt: serverTimestamp(),
+      });
+      setForm({ name: '', method: '', status: 'Seedling', health: '80', planted: '', harvest: '', isExperimental: false });
+      setShowForm(false);
+      toast.success('เพิ่มพืชแล้ว');
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const active      = plants.filter(p => p.status !== 'Done');

@@ -19,15 +19,17 @@ export default function AssetsPage() {
 
   const addAsset = async () => {
     if (!form.name.trim() || !form.value) return toast.error('กรอกข้อมูลให้ครบ');
-    await addDoc(collection(db, 'assets'), {
-      ...form,
-      value: +form.value,
-      uid: UID,
-      createdAt: serverTimestamp(),
-    });
-    setForm({ name: '', category: '', value: '', change: '0%', type: 'up' });
-    setShowForm(false);
-    toast.success('เพิ่มสินทรัพย์แล้ว');
+    try {
+      await addDoc(collection(db, 'assets'), {
+        ...form,
+        value: +form.value,
+        uid: UID,
+        createdAt: serverTimestamp(),
+      });
+      setForm({ name: '', category: '', value: '', change: '0%', type: 'up' });
+      setShowForm(false);
+      toast.success('เพิ่มสินทรัพย์แล้ว');
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const totalValue = assets.reduce((s, a) => s + a.value, 0);

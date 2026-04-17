@@ -28,17 +28,19 @@ export default function ProjectsPage() {
     if (!form.title.trim()) return toast.error('กรอกชื่อโปรเจกต์');
     const tasks = +form.tasks || 0;
     const completedTasks = +form.completedTasks || 0;
-    await addDoc(collection(db, 'projects'), {
-      ...form,
-      tasks,
-      completedTasks,
-      progress: tasks > 0 ? Math.round((completedTasks / tasks) * 100) : 0,
-      uid: UID,
-      createdAt: serverTimestamp(),
-    });
-    setForm({ title: '', category: '', status: 'Planning', due: '', tasks: '0', completedTasks: '0' });
-    setShowForm(false);
-    toast.success('เพิ่มโปรเจกต์แล้ว');
+    try {
+      await addDoc(collection(db, 'projects'), {
+        ...form,
+        tasks,
+        completedTasks,
+        progress: tasks > 0 ? Math.round((completedTasks / tasks) * 100) : 0,
+        uid: UID,
+        createdAt: serverTimestamp(),
+      });
+      setForm({ title: '', category: '', status: 'Planning', due: '', tasks: '0', completedTasks: '0' });
+      setShowForm(false);
+      toast.success('เพิ่มโปรเจกต์แล้ว');
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   return (

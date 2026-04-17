@@ -18,13 +18,17 @@ export default function TasksPage() {
 
   const addTask = async () => {
     if (!newTitle.trim()) return;
-    await addDoc(collection(db, 'tasks'), { title: newTitle, completed: false, uid: UID, createdAt: serverTimestamp() });
-    setNewTitle('');
-    toast.success('Task added');
+    try {
+      await addDoc(collection(db, 'tasks'), { title: newTitle, completed: false, uid: UID, createdAt: serverTimestamp() });
+      setNewTitle('');
+      toast.success('Task added');
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const toggle = async (t: Task) => {
-    await updateDoc(doc(db, 'tasks', t.id!), { completed: !t.completed });
+    try {
+      await updateDoc(doc(db, 'tasks', t.id!), { completed: !t.completed });
+    } catch { toast.error('อัปเดตไม่สำเร็จ'); }
   };
 
   const pending   = tasks.filter(t => !t.completed);

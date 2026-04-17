@@ -26,20 +26,24 @@ export default function FitnessPage() {
 
   const addLog = async () => {
     if (!form.title.trim()) return toast.error('กรอกชื่อกิจกรรม');
-    await addDoc(collection(db, 'fitnessLogs'), {
-      ...form,
-      calories: form.calories ? +form.calories : undefined,
-      completed: false,
-      uid: UID,
-      createdAt: serverTimestamp(),
-    });
-    setForm({ title: '', type: 'Workout', duration: '', intensity: 'Medium', calories: '', protein: '' });
-    setShowForm(false);
-    toast.success('เพิ่มกิจกรรมแล้ว');
+    try {
+      await addDoc(collection(db, 'fitnessLogs'), {
+        ...form,
+        calories: form.calories ? +form.calories : undefined,
+        completed: false,
+        uid: UID,
+        createdAt: serverTimestamp(),
+      });
+      setForm({ title: '', type: 'Workout', duration: '', intensity: 'Medium', calories: '', protein: '' });
+      setShowForm(false);
+      toast.success('เพิ่มกิจกรรมแล้ว');
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const toggleLog = async (l: FitnessLog) => {
-    await updateDoc(doc(db, 'fitnessLogs', l.id!), { completed: !l.completed });
+    try {
+      await updateDoc(doc(db, 'fitnessLogs', l.id!), { completed: !l.completed });
+    } catch { toast.error('อัปเดตไม่สำเร็จ'); }
   };
 
   const totalCalories = logs.filter(l => l.completed && l.calories).reduce((s, l) => s + (l.calories || 0), 0);

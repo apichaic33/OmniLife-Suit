@@ -105,18 +105,20 @@ export default function TradePage() {
   // ── Actions ─────────────────────────────────────────────────
   const handleAdd = async () => {
     if (!form.pair || !form.price || !form.amount) return toast.error('กรอกข้อมูลให้ครบ');
-    await addDoc(collection(db, 'trades'), {
-      ...form,
-      price: +form.price, amount: +form.amount,
-      stopLoss:   form.stopLoss   ? +form.stopLoss   : null,
-      takeProfit: form.takeProfit ? +form.takeProfit : null,
-      status: 'Open', uid: DEMO_UID,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: serverTimestamp(),
-    });
-    toast.success('เพิ่ม Trade แล้ว');
-    setShowAddForm(false);
-    setForm({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' });
+    try {
+      await addDoc(collection(db, 'trades'), {
+        ...form,
+        price: +form.price, amount: +form.amount,
+        stopLoss:   form.stopLoss   ? +form.stopLoss   : null,
+        takeProfit: form.takeProfit ? +form.takeProfit : null,
+        status: 'Open', uid: DEMO_UID,
+        date: new Date().toISOString().split('T')[0],
+        createdAt: serverTimestamp(),
+      });
+      toast.success('เพิ่ม Trade แล้ว');
+      setShowAddForm(false);
+      setForm({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' });
+    } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const handleClose = async (t: Trade) => {
@@ -125,14 +127,16 @@ export default function TradePage() {
     const pnl = t.type === 'Buy'
       ? (cp - t.price) * t.amount
       : (t.price - cp) * t.amount;
-    await updateDoc(doc(db, 'trades', t.id!), {
-      status: 'Closed', closePrice: cp,
-      closedAt: new Date().toISOString().split('T')[0],
-      pnl: Math.round(pnl * 100) / 100,
-    });
-    toast.success(`ปิด Trade ${pnl >= 0 ? '🟢 กำไร' : '🔴 ขาดทุน'} ${Math.abs(pnl).toLocaleString()}`);
-    setClosingId(null);
-    setClosePrice('');
+    try {
+      await updateDoc(doc(db, 'trades', t.id!), {
+        status: 'Closed', closePrice: cp,
+        closedAt: new Date().toISOString().split('T')[0],
+        pnl: Math.round(pnl * 100) / 100,
+      });
+      toast.success(`ปิด Trade ${pnl >= 0 ? '🟢 กำไร' : '🔴 ขาดทุน'} ${Math.abs(pnl).toLocaleString()}`);
+      setClosingId(null);
+      setClosePrice('');
+    } catch { toast.error('อัปเดตไม่สำเร็จ — ตรวจสอบ Firestore'); }
   };
 
   const handleSimulate = () => {
