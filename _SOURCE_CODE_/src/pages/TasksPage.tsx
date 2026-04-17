@@ -116,7 +116,7 @@ export default function TasksPage() {
           </button>
         </div>
       ) : (
-        <div className="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+        <div className="flex gap-1 flex-shrink-0">
           <button
             onClick={e => { e.stopPropagation(); startEdit(t); }}
             className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
