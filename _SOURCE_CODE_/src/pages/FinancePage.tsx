@@ -16,6 +16,30 @@ import { toast } from 'sonner';
 
 const UID = 'demo-user';
 
+/* ── Debt amortization helpers ── */
+const monthlyInterest = (remaining: number, annualRate: number) =>
+  remaining * (annualRate / 100 / 12);
+
+const calcPayoffMonths = (remaining: number, payment: number, annualRate: number): number => {
+  if (payment <= 0 || remaining <= 0) return 0;
+  const r = annualRate / 100 / 12;
+  if (r === 0) return Math.ceil(remaining / payment);
+  if (payment <= remaining * r) return Infinity; // payment doesn't cover interest
+  return Math.ceil(-Math.log(1 - (r * remaining) / payment) / Math.log(1 + r));
+};
+
+const payoffLabel = (months: number): string => {
+  if (months === Infinity) return 'ค่างวดน้อยกว่าดอกเบี้ย ⚠️';
+  if (months <= 0) return 'ชำระครบแล้ว ✓';
+  const yrs = Math.floor(months / 12);
+  const mth = months % 12;
+  const now = new Date();
+  now.setMonth(now.getMonth() + months);
+  const finish = `${now.getFullYear() + 543}/${String(now.getMonth() + 1).padStart(2, '0')}`;
+  if (yrs > 0) return `อีก ${yrs} ปี ${mth} เดือน (ครบ ${finish})`;
+  return `อีก ${mth} เดือน (ครบ ${finish})`;
+};
+
 const EXPENSE_CATS = ['อาหาร', 'ที่พัก', 'เดินทาง', 'สุขภาพ', 'การศึกษา', 'บันเทิง', 'ช็อปปิ้ง', 'ค่างวด', 'อื่นๆ'];
 const INCOME_CATS  = ['เงินเดือน', 'ธุรกิจ', 'ลงทุน', 'ค่าเช่า', 'ฟรีแลนซ์', 'อื่นๆ'];
 
@@ -99,13 +123,17 @@ export default function FinancePage() {
       } else {
         await addDoc(collection(db, 'transactions'), { ...data, createdAt: serverTimestamp() });
 
-        // ── Auto-reduce debt remaining balance ──
+        // ── Auto-reduce debt remaining balance (with interest split) ──
         if (txForm.debtId && txForm.type === 'expense') {
           const debt = debts.find(d => d.id === txForm.debtId);
           if (debt) {
-            const newBalance = Math.max(0, debt.remainingBalance - amount);
+            const interest       = monthlyInterest(debt.remainingBalance, debt.interestRate);
+            const principal      = Math.max(0, amount - interest);
+            const newBalance     = Math.max(0, debt.remainingBalance - principal);
             await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
-            toast.success(`เพิ่มรายการแล้ว · หนี้ "${debt.title}" ลดเหลือ ฿${newBalance.toLocaleString()}`);
+            toast.success(
+              `ชำระแล้ว · ดอกเบี้ย ฿${interest.toFixed(0)} · เงินต้น ฿${principal.toFixed(0)} · คงเหลือ ฿${newBalance.toLocaleString()}`
+            );
           } else { toast.success('เพิ่มรายการแล้ว'); }
         } else {
           toast.success('เพิ่มรายการแล้ว');
@@ -121,8 +149,20 @@ export default function FinancePage() {
     setEditTxId(t.id!); setShowTxForm(true); setTab('transactions');
   };
   const deleteTx = async (t: Transaction) => {
-    try { await deleteDoc(doc(db, 'transactions', t.id!)); toast.success('ลบแล้ว'); }
-    catch { toast.error('ลบไม่สำเร็จ'); }
+    try {
+      await deleteDoc(doc(db, 'transactions', t.id!));
+      // ── Restore debt balance if this was a debt payment ──
+      if (t.debtId && t.type === 'expense') {
+        const debt = debts.find(d => d.id === t.debtId);
+        if (debt) {
+          const interest   = monthlyInterest(debt.remainingBalance, debt.interestRate);
+          const principal  = Math.max(0, t.amount - interest);
+          const restored   = debt.remainingBalance + principal;
+          await updateDoc(doc(db, 'debts', t.debtId), { remainingBalance: restored });
+        }
+      }
+      toast.success('ลบแล้ว');
+    } catch { toast.error('ลบไม่สำเร็จ'); }
   };
 
   /* ── Debts CRUD ── */
@@ -429,23 +469,41 @@ export default function FinancePage() {
           {debts.length === 0
             ? <div className="text-sm text-center py-8" style={{ color: 'var(--color-muted)' }}>ยังไม่มีหนี้ — กด + Debt</div>
             : debts.map(d => {
-              const paid      = debtPaid(d.id!);
-              const paidPct   = d.totalAmount > 0 ? Math.min(100, Math.round((1 - d.remainingBalance / d.totalAmount) * 100)) : 0;
-              const linkedTxs = transactions.filter(t => t.debtId === d.id);
+              const paid       = debtPaid(d.id!);
+              const paidPct    = d.totalAmount > 0 ? Math.min(100, Math.round((1 - d.remainingBalance / d.totalAmount) * 100)) : 0;
+              const linkedTxs  = transactions.filter(t => t.debtId === d.id);
+              const interest   = monthlyInterest(d.remainingBalance, d.interestRate);
+              const principal  = Math.max(0, d.monthlyPayment - interest);
+              const months     = calcPayoffMonths(d.remainingBalance, d.monthlyPayment, d.interestRate);
               return (
                 <div key={d.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                  {/* Header */}
                   <div className="flex justify-between items-start mb-3">
                     <div>
                       <span className="font-medium" style={{ color: 'var(--color-text)' }}>{d.title}</span>
                       <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>{d.type}</span>
                     </div>
                     <div className="flex gap-1">
+                      {/* Quick pay button */}
+                      <button
+                        onClick={() => {
+                          setTxForm({ title: `ค่างวด ${d.title}`, category: 'ค่างวด', amount: d.monthlyPayment as any, date: new Date().toISOString().split('T')[0], type: 'expense', debtId: d.id!, businessId: '' });
+                          setEditTxId(null); setShowTxForm(true); setTab('transactions');
+                        }}
+                        className="px-2 py-1 rounded-lg text-xs transition-all active:scale-90 hover:brightness-110"
+                        style={{ background: '#22c55e22', color: '#22c55e' }}
+                        title="บันทึกชำระค่างวด"
+                      >
+                        ชำระ
+                      </button>
                       <button onClick={() => editDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
                         style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
                       <button onClick={() => deleteDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
                         style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
                     </div>
                   </div>
+
+                  {/* Progress bar */}
                   {d.totalAmount > 0 && (
                     <div className="mb-3">
                       <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
@@ -457,16 +515,36 @@ export default function FinancePage() {
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-3 gap-3 text-xs mb-2">
-                    <div><span style={{ color: 'var(--color-muted)' }}>ดอกเบี้ย</span><br /><span style={{ color: 'var(--color-text)' }}>{d.interestRate}%/ปี</span></div>
-                    <div><span style={{ color: 'var(--color-muted)' }}>ค่างวด</span><br /><span style={{ color: 'var(--color-text)' }}>฿{d.monthlyPayment?.toLocaleString()}</span></div>
-                    <div><span style={{ color: 'var(--color-muted)' }}>ครบกำหนด</span><br /><span style={{ color: 'var(--color-text)' }}>{d.dueDate || '—'}</span></div>
+
+                  {/* Stats grid */}
+                  <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                    <div className="rounded-lg p-2" style={{ background: '#ef444411' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>ดอกเบี้ย/เดือน</div>
+                      <div className="font-semibold mt-0.5" style={{ color: '#ef4444' }}>฿{interest.toFixed(0)}</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background: '#22c55e11' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>ตัดเงินต้น/เดือน</div>
+                      <div className="font-semibold mt-0.5" style={{ color: '#22c55e' }}>฿{principal.toFixed(0)}</div>
+                    </div>
+                    <div className="rounded-lg p-2" style={{ background: '#6366f111' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>ค่างวด/เดือน</div>
+                      <div className="font-semibold mt-0.5" style={{ color: '#818cf8' }}>฿{d.monthlyPayment?.toLocaleString()}</div>
+                    </div>
                   </div>
-                  {/* Linked transactions summary */}
+
+                  {/* Payoff timeline */}
+                  {d.remainingBalance > 0 && d.monthlyPayment > 0 && (
+                    <div className="text-xs px-3 py-2 rounded-lg mb-2 flex items-center gap-2"
+                      style={{ background: months === Infinity ? '#ef444411' : '#6366f111', color: months === Infinity ? '#ef4444' : '#818cf8' }}>
+                      🏁 {payoffLabel(months)}
+                    </div>
+                  )}
+
+                  {/* Linked transactions */}
                   {linkedTxs.length > 0 && (
-                    <div className="pt-2 border-t text-xs flex items-center gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}>
+                    <div className="pt-2 border-t text-xs flex items-center gap-2" style={{ borderColor: 'var(--color-border)' }}>
                       <Link size={11} style={{ color: '#f59e0b' }} />
-                      <span style={{ color: '#f59e0b' }}>ชำระจาก Transactions {linkedTxs.length} ครั้ง · ฿{paid.toLocaleString()} รวม</span>
+                      <span style={{ color: '#f59e0b' }}>ชำระ {linkedTxs.length} ครั้ง · ฿{paid.toLocaleString()} รวม</span>
                     </div>
                   )}
                 </div>
