@@ -11,6 +11,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import AgriculturePage from './pages/AgriculturePage';
 import AssetsPage from './pages/AssetsPage';
 import MiroFishPage from './pages/MiroFishPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 export type Page =
   | 'dashboard'
@@ -21,7 +22,8 @@ export type Page =
   | 'projects'
   | 'agriculture'
   | 'assets'
-  | 'mirofish';
+  | 'mirofish'
+  | 'analytics';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -37,6 +39,7 @@ export default function App() {
       case 'agriculture':  return <AgriculturePage />;
       case 'assets':       return <AssetsPage />;
       case 'mirofish':     return <MiroFishPage />;
+      case 'analytics':    return <AnalyticsPage />;
       default:             return <Dashboard onNavigate={setCurrentPage} />;
     }
   };

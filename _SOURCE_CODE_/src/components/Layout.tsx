@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { type Page } from '../App';
 import {
   LayoutDashboard, TrendingUp, Wallet, CheckSquare,
-  Dumbbell, FolderKanban, Sprout, Package, Fish
+  Dumbbell, FolderKanban, Sprout, Package, Fish, BarChart2
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -18,6 +18,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'agriculture', label: 'Agriculture',  icon: <Sprout size={18} /> },
   { id: 'assets',      label: 'Assets',       icon: <Package size={18} /> },
   { id: 'mirofish',    label: 'MiroFish AI',  icon: <Fish size={18} />, mirofish: true },
+  { id: 'analytics',   label: 'Analytics',    icon: <BarChart2 size={18} /> },
 ];
 
 interface Props {

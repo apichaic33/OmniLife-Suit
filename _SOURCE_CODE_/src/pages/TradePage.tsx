@@ -2,9 +2,9 @@ import { useEffect, useState, useCallback } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { buildTradeSeed } from '../lib/mirofish';
-import { fetchPrices, baseCurrency, formatChange, type PriceData } from '../lib/market';
+import { fetchPrices, baseCurrency, formatChange, detectAssetType, ASSET_META, getAVKey, setAVKey, type PriceData } from '../lib/market';
 import type { Trade } from '../types';
-import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw, ShieldAlert, Bell } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw, ShieldAlert, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import MiroFishSimulator from '../components/MiroFishSimulator';
@@ -29,7 +29,20 @@ export default function TradePage() {
     return saved ? +saved : 0;
   });
   const [showPortfolioInput, setShowPortfolioInput] = useState(false);
-  const [alertedIds, setAlertedIds] = useState<Set<string>>(new Set());
+  const [alertedIds, setAlertedIds]   = useState<Set<string>>(new Set());
+  const [avKey,      setAvKeyState]   = useState(getAVKey);
+  const [showAvInput, setShowAvInput] = useState(false);
+
+  const saveAvKey = (k: string) => { setAVKey(k); setAvKeyState(k); setShowAvInput(false); };
+
+  // Asset type badge
+  const AssetBadge = ({ pair }: { pair: string }) => {
+    const meta = ASSET_META[detectAssetType(pair)];
+    return (
+      <span className="text-xs px-1.5 py-0.5 rounded font-medium"
+        style={{ background: meta.bg, color: meta.color }}>{meta.label}</span>
+    );
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'trades'), orderBy('createdAt', 'desc'), limit(100));
@@ -214,14 +227,28 @@ export default function TradePage() {
       {showAddForm && (
         <div className="rounded-xl p-4 border space-y-3" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Pair / Symbol</label>
+              <input type="text" placeholder="BTC/USDT · EUR/USD · AAPL · XAU/USD · SPY · SPX"
+                value={form.pair} onChange={e => setForm(p => ({ ...p, pair: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              {form.pair && (
+                <div className="mt-1">
+                  <AssetBadge pair={form.pair} />
+                  <span className="text-xs ml-1.5" style={{ color: 'var(--color-muted)' }}>
+                    → {ASSET_META[detectAssetType(form.pair)].source}
+                  </span>
+                </div>
+              )}
+            </div>
             {[
-              { key: 'pair',   label: 'Pair',   placeholder: 'BTC/USDT' },
               { key: 'price',  label: 'Price',  placeholder: '85000', type: 'number' },
               { key: 'amount', label: 'Amount', placeholder: '0.1',   type: 'number' },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>{f.label}</label>
-                <input type={f.type || 'text'} placeholder={f.placeholder}
+                <input type={f.type} placeholder={f.placeholder}
                   value={(form as any)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
                   className="w-full px-3 py-2 rounded-lg text-sm outline-none"
                   style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
@@ -333,7 +360,10 @@ export default function TradePage() {
               ) : open.map(t => (
                 <tr key={t.id} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{t.date}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text)' }}>{t.pair}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium" style={{ color: 'var(--color-text)' }}>{t.pair}</div>
+                    <AssetBadge pair={t.pair} />
+                  </td>
                   <td className="px-4 py-3">
                     <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full w-fit"
                       style={{ background: t.type === 'Buy' ? '#22c55e22' : '#ef444422', color: t.type === 'Buy' ? '#22c55e' : '#ef4444' }}>
@@ -440,7 +470,10 @@ export default function TradePage() {
               ) : closed.map(t => (
                 <tr key={t.id} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                   <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{t.closedAt || t.date}</td>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text)' }}>{t.pair}</td>
+                  <td className="px-4 py-3">
+                    <div className="font-medium" style={{ color: 'var(--color-text)' }}>{t.pair}</div>
+                    <AssetBadge pair={t.pair} />
+                  </td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-medium" style={{ color: t.type === 'Buy' ? '#22c55e' : '#ef4444' }}>{t.type}</span>
                   </td>
@@ -474,6 +507,52 @@ export default function TradePage() {
       {/* ── MARKET TAB ── */}
       {tab === 'market' && (
         <div className="space-y-3">
+
+          {/* Alpha Vantage API Key */}
+          <div className="rounded-xl p-3 border flex items-center gap-3 flex-wrap"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <Key size={15} style={{ color: '#6366f1' }} />
+            <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>Alpha Vantage Key</span>
+            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>(ต้องการดึง หุ้น / ETF / Index / Oil)</span>
+            {showAvInput ? (
+              <input autoFocus type="text" placeholder="ใส่ API key จาก alphavantage.co/support/#api-key"
+                defaultValue={avKey}
+                onBlur={e => saveAvKey(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') saveAvKey((e.target as HTMLInputElement).value); if (e.key === 'Escape') setShowAvInput(false); }}
+                className="flex-1 min-w-48 px-2 py-1 rounded text-xs outline-none"
+                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+            ) : (
+              <button onClick={() => setShowAvInput(true)} className="text-xs px-2 py-1 rounded"
+                style={{ background: avKey ? '#22c55e22' : '#6366f122', color: avKey ? '#22c55e' : '#a78bfa', border: '1px solid', borderColor: avKey ? '#22c55e44' : '#6366f144' }}>
+                {avKey ? `✓ Key set (${avKey.slice(0,6)}…)` : 'ตั้งค่า API Key →'}
+              </button>
+            )}
+            {!avKey && (
+              <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noreferrer"
+                className="text-xs underline" style={{ color: '#6366f1' }}>รับ key ฟรี</a>
+            )}
+          </div>
+
+          {/* Provider guide */}
+          <div className="rounded-xl p-3 border text-xs flex flex-wrap gap-3"
+            style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}>
+            {[
+              { label: 'Crypto', ex: 'BTC/USDT', src: 'CoinGecko (ฟรี)', color: '#f59e0b' },
+              { label: 'Gold',   ex: 'XAU/USD',  src: 'CoinGecko/PAXG (ฟรี)', color: '#fbbf24' },
+              { label: 'Forex',  ex: 'EUR/USD, USD/THB', src: 'Frankfurter (ฟรี)', color: '#6366f1' },
+              { label: 'หุ้น',   ex: 'AAPL, TSLA', src: 'Alpha Vantage (ต้องมี key)', color: '#22c55e' },
+              { label: 'ETF',    ex: 'SPY, QQQ',  src: 'Alpha Vantage (ต้องมี key)', color: '#818cf8' },
+              { label: 'Index',  ex: 'SPX, NDX, SET50', src: 'Alpha Vantage (ต้องมี key)', color: '#94a3b8' },
+            ].map(({ label, ex, src, color }) => (
+              <div key={label}>
+                <span className="font-medium px-1.5 py-0.5 rounded text-xs mr-1"
+                  style={{ background: color + '22', color }}>{label}</span>
+                <span style={{ color: 'var(--color-text)' }}>{ex}</span>
+                <span className="ml-1">— {src}</span>
+              </div>
+            ))}
+          </div>
+
           {/* Header + Refresh */}
           <div className="flex items-center justify-between">
             <span className="text-sm" style={{ color: 'var(--color-muted)' }}>
@@ -495,7 +574,7 @@ export default function TradePage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ background: 'var(--color-surface)' }}>
-                    {['Pair', 'Current Price (USD)', '24h Change', 'Open Positions', 'Total Exposure'].map(h => (
+                    {['Pair', 'Type', 'Current Price', '24h Change', 'Open', 'Exposure', 'Source'].map(h => (
                       <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                     ))}
                   </tr>
@@ -509,6 +588,7 @@ export default function TradePage() {
                     return (
                       <tr key={pair} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                         <td className="px-4 py-3 font-semibold" style={{ color: 'var(--color-text)' }}>{pair}</td>
+                        <td className="px-4 py-3"><AssetBadge pair={pair} /></td>
                         <td className="px-4 py-3">
                           {priceLoading && !p
                             ? <Loader2 size={14} className="animate-spin" style={{ color: 'var(--color-muted)' }} />
@@ -529,6 +609,9 @@ export default function TradePage() {
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text)' }}>
                           {exposure > 0 ? `$${exposure.toLocaleString()}` : '—'}
                         </td>
+                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>
+                          {ASSET_META[detectAssetType(pair)].source}
+                        </td>
                       </tr>
                     );
                   })}
@@ -538,7 +621,7 @@ export default function TradePage() {
           )}
 
           <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
-            ราคาจาก CoinGecko · อัปเดตทุก 60 วินาที · รองรับ crypto เท่านั้น
+            CoinGecko (Crypto/Gold) · Frankfurter (Forex) · Alpha Vantage (หุ้น/ETF/Index) · อัปเดตทุก 60 วินาที
           </p>
         </div>
       )}
