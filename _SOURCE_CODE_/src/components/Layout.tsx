@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import { type Page } from '../App';
 import {
   LayoutDashboard, TrendingUp, Wallet, CheckSquare,
-  Dumbbell, FolderKanban, Sprout, Package, Fish, BarChart2, Menu, X
+  Dumbbell, FolderKanban, Sprout, Package, Fish, BarChart2, ScanSearch, Menu, X
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -19,6 +19,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'assets',      label: 'Assets',      icon: <Package size={18} /> },
   { id: 'mirofish',    label: 'MiroFish AI', icon: <Fish size={18} />, mirofish: true },
   { id: 'analytics',   label: 'Analytics',   icon: <BarChart2 size={18} /> },
+  { id: 'scanner',     label: 'Scanner',     icon: <ScanSearch size={18} /> },
 ];
 
 interface Props {

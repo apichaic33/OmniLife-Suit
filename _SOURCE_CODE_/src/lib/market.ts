@@ -1,10 +1,12 @@
 // ============================================================
 // Multi-Provider Market Data
-//  • CoinGecko   — Crypto + Gold (via PAXG proxy)  — free, no key
-//  • Frankfurter — Forex pairs                      — free, no key
-//  • Alpha Vantage — Stocks, ETF, Index, Oil        — free key required
+//  • Binance      — Crypto price + OHLCV             — free, no key, best coverage
+//  • CoinGecko    — Crypto fallback + Gold (PAXG)    — free, no key
+//  • Frankfurter  — Forex pairs                      — free, no key
+//  • Alpha Vantage — Stocks, ETF, Index, Oil         — free key required
 // ============================================================
 
+const BINANCE_BASE      = 'https://api.binance.com/api/v3';
 const GECKO_BASE        = 'https://api.coingecko.com/api/v3';
 const FRANKFURTER_BASE  = 'https://api.frankfurter.app';
 const AV_BASE           = 'https://www.alphavantage.co/query';
@@ -117,7 +119,63 @@ export function formatChange(change: number): string {
 export function getAVKey(): string        { return localStorage.getItem('av_api_key') || ''; }
 export function setAVKey(key: string): void { localStorage.setItem('av_api_key', key.trim()); }
 
-// ── Internal: CoinGecko (crypto + gold via PAXG) ──────────────
+// ── Binance helpers ───────────────────────────────────────────
+
+/** Convert pair to Binance symbol: 'BTC/USDT' → 'BTCUSDT', 'BTC' → 'BTCUSDT' */
+function toBinanceSymbol(pair: string): string {
+  const upper = pair.toUpperCase().trim();
+  if (upper.includes('/')) return upper.replace('/', '');
+  return `${upper}USDT`;
+}
+
+// ── Internal: Binance (crypto — primary) ──────────────────────
+async function _fetchBinancePrices(pairs: string[]): Promise<Record<string, PriceData>> {
+  // Build map: binanceSymbol → baseCurrency  e.g. 'BTCUSDT' → 'BTC'
+  const symbolMap: Record<string, string> = {};
+  for (const pair of pairs) symbolMap[toBinanceSymbol(pair)] = baseCurrency(pair);
+
+  const symbolsParam = encodeURIComponent(JSON.stringify(Object.keys(symbolMap)));
+  try {
+    const res = await fetch(
+      `${BINANCE_BASE}/ticker/24hr?symbols=${symbolsParam}&type=MINI`,
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!res.ok) return {};
+    const data: Array<{ symbol: string; lastPrice: string; priceChangePercent: string }> = await res.json();
+    const result: Record<string, PriceData> = {};
+    for (const item of data) {
+      const base = symbolMap[item.symbol];
+      if (base) result[base] = {
+        usd: parseFloat(item.lastPrice),
+        usd_24h_change: parseFloat(item.priceChangePercent),
+      };
+    }
+    return result;
+  } catch { return {}; }
+}
+
+/** Fetch OHLCV klines from Binance. interval examples: '4h', '1d', '1h' */
+async function _fetchBinanceOHLCV(
+  binanceSymbol: string,
+  interval: string,
+  limit: number,
+): Promise<{ time: number; open: number; high: number; low: number; close: number }[]> {
+  const res = await fetch(
+    `${BINANCE_BASE}/klines?symbol=${binanceSymbol}&interval=${interval}&limit=${limit}`,
+    { signal: AbortSignal.timeout(12000) }
+  );
+  if (!res.ok) throw new Error(`Binance klines error: ${res.status}`);
+  const raw: [number, string, string, string, string, ...unknown[]][] = await res.json();
+  return raw.map(c => ({
+    time:  c[0],
+    open:  parseFloat(c[1]),
+    high:  parseFloat(c[2]),
+    low:   parseFloat(c[3]),
+    close: parseFloat(c[4]),
+  }));
+}
+
+// ── Internal: CoinGecko (crypto fallback + gold via PAXG) ─────
 async function _fetchCryptoPrices(pairs: string[]): Promise<Record<string, PriceData>> {
   const bases  = [...new Set(pairs.map(baseCurrency))];
   const idList = bases.map(b => GECKO_ID[b]).filter(Boolean).join(',');
@@ -222,42 +280,81 @@ async function _fetchAVPrices(symbols: string[], apiKey: string): Promise<Record
 export async function fetchPrices(pairs: string[]): Promise<Record<string, PriceData>> {
   if (pairs.length === 0) return {};
 
-  const cryptoGoldPairs:  string[] = [];
-  const forexPairs:       string[] = [];
-  const avSymbols:        string[] = [];
+  const cryptoPairs:  string[] = [];
+  const goldPairs:    string[] = [];
+  const forexPairs:   string[] = [];
+  const avSymbols:    string[] = [];
 
   for (const pair of pairs) {
     const type = detectAssetType(pair);
-    if (type === 'crypto' || type === 'gold')     cryptoGoldPairs.push(pair);
-    else if (type === 'forex')                    forexPairs.push(pair);
-    else                                          avSymbols.push(baseCurrency(pair)); // stock/etf/index/commodity
+    if (type === 'crypto')      cryptoPairs.push(pair);
+    else if (type === 'gold')   goldPairs.push(pair);
+    else if (type === 'forex')  forexPairs.push(pair);
+    else                        avSymbols.push(baseCurrency(pair));
   }
 
-  const [cryptoResult, forexResult, avResult] = await Promise.all([
-    cryptoGoldPairs.length > 0 ? _fetchCryptoPrices(cryptoGoldPairs) : Promise.resolve({}),
-    forexPairs.length      > 0 ? _fetchForexPrices(forexPairs)       : Promise.resolve({}),
-    avSymbols.length       > 0 ? _fetchAVPrices(avSymbols, getAVKey()) : Promise.resolve({}),
+  // Fetch crypto: Binance primary → fill gaps with CoinGecko
+  let cryptoResult: Record<string, PriceData> = {};
+  if (cryptoPairs.length > 0) {
+    cryptoResult = await _fetchBinancePrices(cryptoPairs);
+    const missing = cryptoPairs.filter(p => !cryptoResult[baseCurrency(p)]);
+    if (missing.length > 0) {
+      const fallback = await _fetchCryptoPrices(missing);
+      cryptoResult = { ...cryptoResult, ...fallback };
+    }
+  }
+
+  const [goldResult, forexResult, avResult] = await Promise.all([
+    goldPairs.length   > 0 ? _fetchCryptoPrices(goldPairs)          : Promise.resolve({}),
+    forexPairs.length  > 0 ? _fetchForexPrices(forexPairs)          : Promise.resolve({}),
+    avSymbols.length   > 0 ? _fetchAVPrices(avSymbols, getAVKey())  : Promise.resolve({}),
   ]);
 
-  return { ...cryptoResult, ...forexResult, ...avResult };
+  return { ...cryptoResult, ...goldResult, ...forexResult, ...avResult };
 }
 
-// ── OHLCV (CoinGecko — crypto/gold only) ─────────────────────
+// ── OHLCV (Binance for crypto · CoinGecko for gold) ──────────
 /**
- * Fetch OHLCV candles from CoinGecko.
- * Only works for crypto and gold (via PAXG).
+ * Fetch 4h OHLCV candles.
+ * • Crypto → Binance /klines (primary, higher rate limit, all pairs)
+ * • Gold   → CoinGecko via PAXG (fallback; Binance doesn't carry XAU)
+ * • Gold fallback if Binance fails → CoinGecko
  */
 export async function fetchOHLCV(
   base: string,
   days: number,
 ): Promise<{ time: number; open: number; high: number; low: number; close: number }[]> {
-  const id = GECKO_ID[base.toUpperCase()];
-  if (!id) throw new Error(`No CoinGecko ID for: ${base}`);
-  const res = await fetch(
-    `${GECKO_BASE}/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
-    { signal: AbortSignal.timeout(12000) }
-  );
-  if (!res.ok) throw new Error(`CoinGecko OHLCV error: ${res.status}`);
-  const raw: [number, number, number, number, number][] = await res.json();
-  return raw.map(([time, open, high, low, close]) => ({ time, open, high, low, close }));
+  const upper = base.toUpperCase();
+  const assetType = detectAssetType(`${upper}/USDT`);
+  const limit = Math.min(days * 6, 1000); // 4h × 6 per day, Binance max 1000
+
+  // Gold — use CoinGecko/PAXG (Binance doesn't have XAU spot)
+  if (assetType === 'gold') {
+    const id = GECKO_ID[upper];
+    if (!id) throw new Error(`No CoinGecko ID for: ${upper}`);
+    const res = await fetch(
+      `${GECKO_BASE}/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
+      { signal: AbortSignal.timeout(12000) }
+    );
+    if (!res.ok) throw new Error(`CoinGecko OHLCV error: ${res.status}`);
+    const raw: [number, number, number, number, number][] = await res.json();
+    return raw.map(([time, open, high, low, close]) => ({ time, open, high, low, close }));
+  }
+
+  // Crypto — try Binance first, fallback to CoinGecko
+  const binanceSymbol = `${upper}USDT`;
+  try {
+    return await _fetchBinanceOHLCV(binanceSymbol, '4h', limit);
+  } catch {
+    // Fallback: CoinGecko (only works if base is in GECKO_ID)
+    const id = GECKO_ID[upper];
+    if (!id) throw new Error(`No OHLCV source for: ${upper}`);
+    const res = await fetch(
+      `${GECKO_BASE}/coins/${id}/ohlc?vs_currency=usd&days=${days}`,
+      { signal: AbortSignal.timeout(12000) }
+    );
+    if (!res.ok) throw new Error(`CoinGecko OHLCV fallback error: ${res.status}`);
+    const raw: [number, number, number, number, number][] = await res.json();
+    return raw.map(([time, open, high, low, close]) => ({ time, open, high, low, close }));
+  }
 }
