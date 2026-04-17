@@ -27,6 +27,7 @@ export interface Transaction {
   date: string;
   type: 'income' | 'expense';
   debtId?: string;
+  principalOnly?: boolean;
   businessId?: string;
   taxAmount?: number;
   isTaxDeductible?: boolean;

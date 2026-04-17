@@ -76,6 +76,7 @@ const defTx = {
   date: new Date().toISOString().split('T')[0],
   type: 'expense' as 'income' | 'expense',
   debtId: '', businessId: '',
+  principalOnly: false,
 };
 const defDebt = {
   title: '', type: 'Personal Loan' as Debt['type'],
@@ -135,8 +136,9 @@ export default function FinancePage() {
       const data: any = {
         title: txForm.title, category: txForm.category,
         amount, date: txForm.date, type: txForm.type, uid: UID,
-        ...(txForm.debtId     ? { debtId: txForm.debtId }         : {}),
-        ...(txForm.businessId ? { businessId: txForm.businessId } : {}),
+        ...(txForm.debtId       ? { debtId: txForm.debtId }                   : {}),
+        ...(txForm.debtId && txForm.principalOnly ? { principalOnly: true }   : {}),
+        ...(txForm.businessId   ? { businessId: txForm.businessId }           : {}),
       };
 
       if (editTxId) {
@@ -145,17 +147,25 @@ export default function FinancePage() {
       } else {
         await addDoc(collection(db, 'transactions'), { ...data, createdAt: serverTimestamp() });
 
-        // ── Auto-reduce debt remaining balance (with interest split) ──
+        // ── Auto-reduce debt remaining balance ──
         if (txForm.debtId && txForm.type === 'expense') {
           const debt = debts.find(d => d.id === txForm.debtId);
           if (debt) {
-            const interest       = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
-            const principal      = Math.max(0, amount - interest);
-            const newBalance     = Math.max(0, debt.remainingBalance - principal);
-            await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
-            toast.success(
-              `ชำระแล้ว · ดอกเบี้ย ฿${interest.toFixed(0)} · เงินต้น ฿${principal.toFixed(0)} · คงเหลือ ฿${newBalance.toLocaleString()}`
-            );
+            if (txForm.principalOnly) {
+              // โปะเงินต้นล้วนๆ — ตัดเงินต้นทั้งหมด ไม่หักดอกเบี้ย
+              const newBalance = Math.max(0, debt.remainingBalance - amount);
+              await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
+              toast.success(`โปะเงินต้น ฿${amount.toLocaleString()} · คงเหลือ ฿${newBalance.toLocaleString()}`);
+            } else {
+              // ค่างวดปกติ — หักดอกเบี้ยก่อน ส่วนที่เหลือตัดเงินต้น
+              const interest   = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
+              const principal  = Math.max(0, amount - interest);
+              const newBalance = Math.max(0, debt.remainingBalance - principal);
+              await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
+              toast.success(
+                `ชำระแล้ว · ดอกเบี้ย ฿${interest.toFixed(0)} · เงินต้น ฿${principal.toFixed(0)} · คงเหลือ ฿${newBalance.toLocaleString()}`
+              );
+            }
           } else { toast.success('เพิ่มรายการแล้ว'); }
         } else {
           toast.success('เพิ่มรายการแล้ว');
@@ -167,7 +177,7 @@ export default function FinancePage() {
   };
 
   const editTx = (t: Transaction) => {
-    setTxForm({ title: t.title, category: t.category, amount: t.amount as any, date: t.date, type: t.type, debtId: t.debtId ?? '', businessId: t.businessId ?? '' });
+    setTxForm({ title: t.title, category: t.category, amount: t.amount as any, date: t.date, type: t.type, debtId: t.debtId ?? '', businessId: t.businessId ?? '', principalOnly: t.principalOnly ?? false });
     setEditTxId(t.id!); setShowTxForm(true); setTab('transactions');
   };
   const deleteTx = async (t: Transaction) => {
@@ -177,10 +187,14 @@ export default function FinancePage() {
       if (t.debtId && t.type === 'expense') {
         const debt = debts.find(d => d.id === t.debtId);
         if (debt) {
-          const interest   = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
-          const principal  = Math.max(0, t.amount - interest);
-          const restored   = debt.remainingBalance + principal;
-          await updateDoc(doc(db, 'debts', t.debtId), { remainingBalance: restored });
+          let restoredPrincipal: number;
+          if (t.principalOnly) {
+            restoredPrincipal = t.amount; // โปะเงินต้น — คืนเต็มจำนวน
+          } else {
+            const interest    = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
+            restoredPrincipal = Math.max(0, t.amount - interest);
+          }
+          await updateDoc(doc(db, 'debts', t.debtId), { remainingBalance: debt.remainingBalance + restoredPrincipal });
         }
       }
       toast.success('ลบแล้ว');
@@ -339,12 +353,33 @@ export default function FinancePage() {
 
                 {/* ── Link to Debt (expense only) ── */}
                 {txForm.type === 'expense' && debts.length > 0 && (
-                  <div className="col-span-2">
-                    <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: '#f59e0b' }}>
-                      <Link size={11} /> เชื่อมกับหนี้ (ลด remaining balance อัตโนมัติ)
-                    </label>
-                    <CustomSelect value={txForm.debtId} onChange={v => setTxForm(p => ({ ...p, debtId: v }))}
-                      options={debtOptions} />
+                  <div className="col-span-2 space-y-2">
+                    <div>
+                      <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: '#f59e0b' }}>
+                        <Link size={11} /> เชื่อมกับหนี้ (ลด remaining balance อัตโนมัติ)
+                      </label>
+                      <CustomSelect value={txForm.debtId} onChange={v => setTxForm(p => ({ ...p, debtId: v, principalOnly: false }))}
+                        options={debtOptions} />
+                    </div>
+                    {txForm.debtId && (
+                      <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 rounded-lg"
+                        style={{ background: txForm.principalOnly ? '#22c55e22' : 'var(--color-bg)', border: `1px solid ${txForm.principalOnly ? '#22c55e' : 'var(--color-border)'}` }}>
+                        <input
+                          type="checkbox"
+                          checked={txForm.principalOnly}
+                          onChange={e => setTxForm(p => ({ ...p, principalOnly: e.target.checked }))}
+                          className="w-4 h-4 accent-green-500"
+                        />
+                        <div>
+                          <div className="text-xs font-medium" style={{ color: txForm.principalOnly ? '#22c55e' : 'var(--color-text)' }}>
+                            โปะเงินต้น (ไม่หักดอกเบี้ย)
+                          </div>
+                          <div className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                            ตัดเงินต้นทั้งจำนวน — ใช้เมื่อจ่ายดอกเบี้ยงวดนั้นไปแล้ว
+                          </div>
+                        </div>
+                      </label>
+                    )}
                   </div>
                 )}
 
@@ -397,6 +432,9 @@ export default function FinancePage() {
                           {t.debtId && (
                             <div className="flex items-center gap-1 mt-0.5" style={{ color: '#f59e0b' }}>
                               <Link size={10} />{debtName(t.debtId)}
+                              {t.principalOnly && (
+                                <span className="ml-1 px-1.5 py-0.5 rounded text-xs" style={{ background: '#22c55e22', color: '#22c55e', fontSize: '10px' }}>โปะเงินต้น</span>
+                              )}
                             </div>
                           )}
                           {t.businessId && (
@@ -522,7 +560,7 @@ export default function FinancePage() {
                       {/* Quick pay button */}
                       <button
                         onClick={() => {
-                          setTxForm({ title: `ค่างวด ${d.title}`, category: 'ค่างวด', amount: d.monthlyPayment as any, date: new Date().toISOString().split('T')[0], type: 'expense', debtId: d.id!, businessId: '' });
+                          setTxForm({ title: `ค่างวด ${d.title}`, category: 'ค่างวด', amount: d.monthlyPayment as any, date: new Date().toISOString().split('T')[0], type: 'expense', debtId: d.id!, businessId: '', principalOnly: false });
                           setEditTxId(null); setShowTxForm(true); setTab('transactions');
                         }}
                         className="px-2 py-1 rounded-lg text-xs transition-all active:scale-90 hover:brightness-110"
