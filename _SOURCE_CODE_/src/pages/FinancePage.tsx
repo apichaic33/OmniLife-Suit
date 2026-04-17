@@ -37,7 +37,7 @@ const defDebt = {
   totalAmount: '' as any, remainingBalance: '' as any,
   interestRate: '' as any, monthlyPayment: '' as any, dueDate: '',
 };
-const defBiz = { name: '', type: 'Other' as Business['type'], description: '', status: 'Active' as Business['status'] };
+const defBiz = { name: '', type: 'Other' as Business['type'], description: '', status: 'Active' as Business['status'], monthlyTarget: '' as any };
 
 export default function FinancePage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -75,6 +75,7 @@ export default function FinancePage() {
 
   /* ── derived ── */
   const bizRevenue   = (bizId: string) => transactions.filter(t => t.businessId === bizId && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const bizExpense   = (bizId: string) => transactions.filter(t => t.businessId === bizId && t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const debtPaid     = (debtId: string) => transactions.filter(t => t.debtId === debtId).reduce((s, t) => s + t.amount, 0);
   const debtName     = (id?: string) => debts.find(d => d.id === id)?.title ?? '';
   const bizName      = (id?: string) => businesses.find(b => b.id === id)?.name ?? '';
@@ -150,7 +151,7 @@ export default function FinancePage() {
     if (!bizForm.name.trim()) return toast.error('กรอกชื่อธุรกิจ');
     setBizLoading(true);
     try {
-      const data = { ...bizForm, uid: UID };
+      const data = { ...bizForm, monthlyTarget: bizForm.monthlyTarget ? +bizForm.monthlyTarget : undefined, uid: UID };
       if (editBizId) { await updateDoc(doc(db, 'businesses', editBizId), data); toast.success('แก้ไขแล้ว'); }
       else { await addDoc(collection(db, 'businesses'), { ...data, createdAt: serverTimestamp() }); toast.success('เพิ่มธุรกิจแล้ว'); }
       setBizForm({ ...defBiz }); setShowBizForm(false); setEditBizId(null);
@@ -158,7 +159,7 @@ export default function FinancePage() {
     finally { setBizLoading(false); }
   };
   const editBiz = (b: Business) => {
-    setBizForm({ name: b.name, type: b.type, description: b.description ?? '', status: b.status });
+    setBizForm({ name: b.name, type: b.type, description: b.description ?? '', status: b.status, monthlyTarget: b.monthlyTarget ?? '' as any });
     setEditBizId(b.id!); setShowBizForm(true); setTab('businesses');
   };
   const deleteBiz = async (b: Business) => {
@@ -285,11 +286,13 @@ export default function FinancePage() {
                   </div>
                 )}
 
-                {/* ── Link to Business (income only) ── */}
-                {txForm.type === 'income' && businesses.length > 0 && (
+                {/* ── Link to Business (income + expense) ── */}
+                {businesses.length > 0 && (
                   <div className="col-span-2">
-                    <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: '#22c55e' }}>
-                      <Link size={11} /> เชื่อมกับธุรกิจ (นับรายได้รวมต่อธุรกิจ)
+                    <label className="block text-xs mb-1 flex items-center gap-1"
+                      style={{ color: txForm.type === 'income' ? '#22c55e' : '#f59e0b' }}>
+                      <Link size={11} />
+                      {txForm.type === 'income' ? 'เชื่อมกับธุรกิจ (นับรายได้)' : 'เชื่อมกับธุรกิจ (นับต้นทุน/ค่าใช้จ่าย)'}
                     </label>
                     <CustomSelect value={txForm.businessId} onChange={v => setTxForm(p => ({ ...p, businessId: v }))}
                       options={bizOptions} />
@@ -494,6 +497,11 @@ export default function FinancePage() {
                   <CustomSelect value={bizForm.status} onChange={v => setBizForm(p => ({ ...p, status: v as any }))}
                     options={[{ value: 'Active', label: '🟢 Active' }, { value: 'Inactive', label: '⚫ Inactive' }]} />
                 </div>
+                <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>เป้าหมายรายได้/เดือน (฿)</label>
+                  <input type="number" value={bizForm.monthlyTarget} onChange={e => setBizForm(p => ({ ...p, monthlyTarget: e.target.value as any }))}
+                    placeholder="50000" className={inputCls} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
+                </div>
                 <div className="col-span-2">
                   <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>รายละเอียด</label>
                   <input value={bizForm.description} onChange={e => setBizForm(p => ({ ...p, description: e.target.value }))}
@@ -517,11 +525,17 @@ export default function FinancePage() {
           {businesses.length === 0
             ? <div className="text-sm text-center py-8" style={{ color: 'var(--color-muted)' }}>ยังไม่มีธุรกิจ — กด + Business</div>
             : businesses.map(b => {
-              const revenue   = bizRevenue(b.id!);
-              const linkedTxs = transactions.filter(t => t.businessId === b.id);
+              const revenue  = bizRevenue(b.id!);
+              const expense  = bizExpense(b.id!);
+              const profit   = revenue - expense;
+              const target   = b.monthlyTarget ?? 0;
+              const targetPct = target > 0 ? Math.min(100, Math.round((revenue / target) * 100)) : 0;
+              const incomeTxs  = transactions.filter(t => t.businessId === b.id && t.type === 'income');
+              const expenseTxs = transactions.filter(t => t.businessId === b.id && t.type === 'expense');
               return (
                 <div key={b.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                  <div className="flex justify-between items-start">
+                  {/* Header */}
+                  <div className="flex justify-between items-start mb-3">
                     <div>
                       <div className="font-medium" style={{ color: 'var(--color-text)' }}>{b.name}</div>
                       <div className="text-xs" style={{ color: 'var(--color-muted)' }}>{b.type}{b.description ? ` · ${b.description}` : ''}</div>
@@ -537,12 +551,36 @@ export default function FinancePage() {
                         style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
                     </div>
                   </div>
-                  {/* Linked revenue */}
-                  {linkedTxs.length > 0 && (
-                    <div className="mt-3 pt-3 border-t flex items-center gap-2 text-xs" style={{ borderColor: 'var(--color-border)' }}>
-                      <Link size={11} style={{ color: '#22c55e' }} />
-                      <span style={{ color: '#22c55e' }}>รายได้รวมจาก Transactions {linkedTxs.length} รายการ</span>
-                      <span className="ml-auto font-semibold" style={{ color: '#22c55e' }}>฿{revenue.toLocaleString()}</span>
+
+                  {/* Revenue / Expense / Profit */}
+                  <div className="grid grid-cols-3 gap-3 text-xs mb-3">
+                    <div className="rounded-lg p-2 text-center" style={{ background: '#22c55e11' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>รายได้ ({incomeTxs.length})</div>
+                      <div className="font-bold mt-0.5" style={{ color: '#22c55e' }}>฿{revenue.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: '#ef444411' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>ต้นทุน ({expenseTxs.length})</div>
+                      <div className="font-bold mt-0.5" style={{ color: '#ef4444' }}>฿{expense.toLocaleString()}</div>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: profit >= 0 ? '#6366f111' : '#ef444411' }}>
+                      <div style={{ color: 'var(--color-muted)' }}>กำไร</div>
+                      <div className="font-bold mt-0.5" style={{ color: profit >= 0 ? '#818cf8' : '#ef4444' }}>
+                        {profit >= 0 ? '+' : ''}฿{profit.toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Monthly target progress */}
+                  {target > 0 && (
+                    <div>
+                      <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
+                        <span className="flex items-center gap-1"><Link size={10} />เป้าหมาย/เดือน ฿{target.toLocaleString()}</span>
+                        <span style={{ color: targetPct >= 100 ? '#22c55e' : 'var(--color-muted)' }}>{targetPct}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
+                        <div className="h-full rounded-full transition-all"
+                          style={{ width: `${targetPct}%`, background: targetPct >= 100 ? '#22c55e' : targetPct >= 60 ? '#f59e0b' : '#6366f1' }} />
+                      </div>
                     </div>
                   )}
                 </div>

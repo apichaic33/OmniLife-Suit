@@ -53,6 +53,7 @@ export interface Business {
   type: 'Rental' | 'E-commerce' | 'Service' | 'Investment' | 'Other';
   description?: string;
   status: 'Active' | 'Inactive';
+  monthlyTarget?: number;
   uid: string;
   createdAt: string;
 }
