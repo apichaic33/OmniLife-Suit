@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, limit, onSnapshot, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { buildTradeSeed } from '../lib/mirofish';
 import { fetchPrices, baseCurrency, formatChange, detectAssetType, ASSET_META, getAVKey, setAVKey, type PriceData } from '../lib/market';
 import type { Trade } from '../types';
-import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw, ShieldAlert, Key } from 'lucide-react';
+import { TrendingUp, TrendingDown, Plus, Fish, Loader2, X, DollarSign, Target, BarChart2, Activity, RefreshCw, ShieldAlert, Key, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { clsx } from 'clsx';
 import MiroFishSimulator from '../components/MiroFishSimulator';
+import CustomSelect from '../components/CustomSelect';
 
 const DEMO_UID = 'demo-user';
 
@@ -32,6 +33,7 @@ export default function TradePage() {
   const [alertedIds, setAlertedIds]   = useState<Set<string>>(new Set());
   const [avKey,      setAvKeyState]   = useState(getAVKey);
   const [showAvInput, setShowAvInput] = useState(false);
+  const [editTradeId, setEditTradeId] = useState<string | null>(null);
 
   const saveAvKey = (k: string) => { setAVKey(k); setAvKeyState(k); setShowAvInput(false); };
 
@@ -102,23 +104,72 @@ export default function TradePage() {
     trades: closed.filter(t => t.pair === p).length,
   })).filter(p => p.trades > 0).sort((a, b) => b.pnl - a.pnl);
 
+  // Monthly P&L
+  const monthlyPnl = (() => {
+    const map: Record<string, { pnl: number; wins: number; total: number }> = {};
+    closed.forEach(t => {
+      const key = (t.closedAt || t.date || '').slice(0, 7); // YYYY-MM
+      if (!key) return;
+      if (!map[key]) map[key] = { pnl: 0, wins: 0, total: 0 };
+      map[key].pnl   += t.pnl ?? 0;
+      map[key].total += 1;
+      if ((t.pnl ?? 0) > 0) map[key].wins += 1;
+    });
+    return Object.entries(map)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([month, v]) => ({ month, ...v }));
+  })();
+
+  // Trade duration helper
+  const tradeDays = (t: Trade) => {
+    if (!t.closedAt || !t.date) return null;
+    return Math.max(0, Math.round((new Date(t.closedAt).getTime() - new Date(t.date).getTime()) / 86400000));
+  };
+
   // ── Actions ─────────────────────────────────────────────────
   const handleAdd = async () => {
     if (!form.pair || !form.price || !form.amount) return toast.error('กรอกข้อมูลให้ครบ');
+    const payload = {
+      ...form,
+      price: +form.price, amount: +form.amount,
+      stopLoss:   form.stopLoss   ? +form.stopLoss   : null,
+      takeProfit: form.takeProfit ? +form.takeProfit : null,
+    };
     try {
-      await addDoc(collection(db, 'trades'), {
-        ...form,
-        price: +form.price, amount: +form.amount,
-        stopLoss:   form.stopLoss   ? +form.stopLoss   : null,
-        takeProfit: form.takeProfit ? +form.takeProfit : null,
-        status: 'Open', uid: DEMO_UID,
-        date: new Date().toISOString().split('T')[0],
-        createdAt: serverTimestamp(),
-      });
-      toast.success('เพิ่ม Trade แล้ว');
+      if (editTradeId) {
+        await updateDoc(doc(db, 'trades', editTradeId), payload);
+        toast.success('แก้ไข Trade แล้ว');
+        setEditTradeId(null);
+      } else {
+        await addDoc(collection(db, 'trades'), {
+          ...payload, status: 'Open', uid: DEMO_UID,
+          date: new Date().toISOString().split('T')[0],
+          createdAt: serverTimestamp(),
+        });
+        toast.success('เพิ่ม Trade แล้ว');
+      }
       setShowAddForm(false);
       setForm({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' });
     } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
+  };
+
+  const startEdit = (t: Trade) => {
+    setForm({
+      pair: t.pair, type: t.type, price: String(t.price), amount: String(t.amount),
+      stopLoss: t.stopLoss ? String(t.stopLoss) : '',
+      takeProfit: t.takeProfit ? String(t.takeProfit) : '',
+      sentiment: t.sentiment ?? 'neutral', notes: t.notes ?? '',
+    });
+    setEditTradeId(t.id!);
+    setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (t: Trade) => {
+    try {
+      await deleteDoc(doc(db, 'trades', t.id!));
+      toast.success('ลบ Trade แล้ว');
+    } catch { toast.error('ลบไม่สำเร็จ'); }
   };
 
   const handleClose = async (t: Trade) => {
@@ -227,9 +278,12 @@ export default function TradePage() {
         })()}
       </div>
 
-      {/* Add Form */}
+      {/* Add / Edit Form */}
       {showAddForm && (
         <div className="rounded-xl p-4 border space-y-3" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+            {editTradeId ? 'แก้ไข Trade' : 'เพิ่ม Trade ใหม่'}
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Pair / Symbol</label>
@@ -260,11 +314,11 @@ export default function TradePage() {
             ))}
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Type</label>
-              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
-                <option>Buy</option><option>Sell</option>
-              </select>
+              <CustomSelect
+                value={form.type}
+                onChange={v => setForm(p => ({ ...p, type: v }))}
+                options={[{ value: 'Buy', label: '🟢 Buy' }, { value: 'Sell', label: '🔴 Sell' }]}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Stop Loss</label>
@@ -309,8 +363,11 @@ export default function TradePage() {
               style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
           </div>
           <div className="flex gap-2">
-            <button onClick={handleAdd} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--color-accent)' }}>Save</button>
-            <button onClick={() => setShowAddForm(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--color-muted)' }}>Cancel</button>
+            <button onClick={handleAdd} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--color-accent)' }}>
+              {editTradeId ? 'Update' : 'Save'}
+            </button>
+            <button onClick={() => { setShowAddForm(false); setEditTradeId(null); setForm({ pair: '', type: 'Buy', price: '', amount: '', stopLoss: '', takeProfit: '', sentiment: 'neutral', notes: '' }); }}
+              className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--color-muted)' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -431,23 +488,45 @@ export default function TradePage() {
                   </td>
                   <td className="px-4 py-3">
                     {closingId === t.id ? (
-                      <div className="flex items-center gap-1">
-                        <input type="number" placeholder="Close price" value={closePrice}
-                          onChange={e => setClosePrice(e.target.value)}
-                          onKeyDown={e => e.key === 'Enter' && handleClose(t)}
-                          className="w-24 px-2 py-1 rounded text-xs outline-none"
-                          style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-                          autoFocus />
-                        <button onClick={() => handleClose(t)} className="px-2 py-1 rounded text-xs text-white" style={{ background: '#22c55e' }}>✓</button>
-                        <button onClick={() => { setClosingId(null); setClosePrice(''); }}
-                          className="px-1 py-1 rounded text-xs" style={{ color: 'var(--color-muted)' }}><X size={12} /></button>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1">
+                          <input type="number" placeholder="Close price" value={closePrice}
+                            onChange={e => setClosePrice(e.target.value)}
+                            onKeyDown={e => e.key === 'Enter' && handleClose(t)}
+                            className="w-24 px-2 py-1 rounded text-xs outline-none"
+                            style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+                            autoFocus />
+                          <button onClick={() => handleClose(t)} className="px-2 py-1 rounded text-xs text-white" style={{ background: '#22c55e' }}>✓</button>
+                          <button onClick={() => { setClosingId(null); setClosePrice(''); }}
+                            className="px-1 py-1 rounded text-xs" style={{ color: 'var(--color-muted)' }}><X size={12} /></button>
+                        </div>
+                        {prices[baseCurrency(t.pair)]?.usd && (
+                          <button
+                            onClick={() => setClosePrice(String(prices[baseCurrency(t.pair)].usd))}
+                            className="text-xs px-2 py-0.5 rounded transition hover:brightness-110"
+                            style={{ background: '#6366f122', color: '#818cf8' }}>
+                            📌 ใช้ราคาตลาด ${prices[baseCurrency(t.pair)].usd.toLocaleString()}
+                          </button>
+                        )}
                       </div>
                     ) : (
-                      <button onClick={() => setClosingId(t.id!)}
-                        className="px-2 py-1 rounded text-xs font-medium"
-                        style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b33' }}>
-                        Close
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setClosingId(t.id!)}
+                          className="px-2 py-1 rounded text-xs font-medium transition active:scale-90"
+                          style={{ background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b33' }}>
+                          Close
+                        </button>
+                        <button onClick={() => startEdit(t)}
+                          className="p-1.5 rounded transition active:scale-90 hover:brightness-110"
+                          style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>
+                          <Pencil size={12} />
+                        </button>
+                        <button onClick={() => handleDelete(t)}
+                          className="p-1.5 rounded transition active:scale-90 hover:brightness-110"
+                          style={{ background: '#ef444422', color: '#ef4444' }}>
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -463,7 +542,7 @@ export default function TradePage() {
           <table className="w-full text-sm">
             <thead>
               <tr style={{ background: 'var(--color-surface)' }}>
-                {['Closed', 'Pair', 'Type', 'Entry', 'Exit', 'Amount', 'P&L', 'Sentiment / Notes'].map(h => (
+                {['Closed', 'Pair', 'Type', 'Entry', 'Exit', 'Amount', 'P&L', '% Return', 'Duration', 'Sentiment / Notes', ''].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                 ))}
               </tr>
@@ -487,6 +566,15 @@ export default function TradePage() {
                   <td className="px-4 py-3 font-semibold" style={{ color: (t.pnl ?? 0) >= 0 ? '#22c55e' : '#ef4444' }}>
                     {(t.pnl ?? 0) >= 0 ? '+' : ''}{(t.pnl ?? 0).toLocaleString()}
                   </td>
+                  <td className="px-4 py-3 text-xs font-medium">
+                    {t.closePrice && t.price > 0 ? (() => {
+                      const pct = (t.closePrice - t.price) / t.price * 100 * (t.type === 'Buy' ? 1 : -1);
+                      return <span style={{ color: pct >= 0 ? '#22c55e' : '#ef4444' }}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>;
+                    })() : <span style={{ color: 'var(--color-muted)' }}>—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>
+                    {tradeDays(t) !== null ? `${tradeDays(t)}d` : '—'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
                       {t.sentiment && (
@@ -499,6 +587,20 @@ export default function TradePage() {
                         </span>
                       )}
                       {t.notes && <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{t.notes}</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1">
+                      <button onClick={() => startEdit(t)}
+                        className="p-1.5 rounded transition active:scale-90 hover:brightness-110"
+                        style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => handleDelete(t)}
+                        className="p-1.5 rounded transition active:scale-90 hover:brightness-110"
+                        style={{ background: '#ef444422', color: '#ef4444' }}>
+                        <Trash2 size={12} />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -735,6 +837,36 @@ export default function TradePage() {
                   </div>
                 );
               })()}
+
+              {/* Monthly P&L */}
+              {monthlyPnl.length > 0 && (
+                <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
+                  <div className="px-4 py-3 text-sm font-medium border-b" style={{ background: 'var(--color-surface)', color: 'var(--color-text)', borderColor: 'var(--color-border)' }}>
+                    Monthly P&L
+                  </div>
+                  {monthlyPnl.map(m => {
+                    const maxAbs = Math.max(...monthlyPnl.map(x => Math.abs(x.pnl)));
+                    const pct = maxAbs > 0 ? Math.abs(m.pnl) / maxAbs * 100 : 0;
+                    const winPct = m.total > 0 ? Math.round(m.wins / m.total * 100) : 0;
+                    return (
+                      <div key={m.month} className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+                        <div className="flex justify-between mb-1">
+                          <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{m.month}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{m.total} trades · {winPct}% win</span>
+                            <span className="text-sm font-semibold" style={{ color: m.pnl >= 0 ? '#22c55e' : '#ef4444' }}>
+                              {m.pnl >= 0 ? '+' : ''}{m.pnl.toLocaleString()}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${pct}%`, background: m.pnl >= 0 ? '#22c55e' : '#ef4444' }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* P&L by pair */}
               {pnlByPair.length > 0 && (
