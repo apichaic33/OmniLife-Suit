@@ -8,7 +8,7 @@ import { buildFinanceSeed } from '../lib/mirofish';
 import type { Transaction, Debt, Business } from '../types';
 import {
   Fish, TrendingUp, TrendingDown, Wallet,
-  Plus, Pencil, Trash2, Check, X, Loader2,
+  Plus, Pencil, Trash2, Loader2, Link,
 } from 'lucide-react';
 import MiroFishSimulator from '../components/MiroFishSimulator';
 import CustomSelect from '../components/CustomSelect';
@@ -21,25 +21,23 @@ const INCOME_CATS  = ['เงินเดือน', 'ธุรกิจ', 'ล�
 
 type Tab = 'transactions' | 'debts' | 'businesses';
 
-/* ─── small helpers ─────────────────────────────────────────── */
-const inputCls = 'w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150';
+const inputCls   = 'w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150';
 const inputStyle = { background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' };
-const onFocus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-  (e.currentTarget.style.border = '1px solid var(--color-accent)');
-const onBlur = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-  (e.currentTarget.style.border = '1px solid var(--color-border)');
+const onFocus    = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = '1px solid var(--color-accent)');
+const onBlur     = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = '1px solid var(--color-border)');
 
-/* ─── default forms ─────────────────────────────────────────── */
-const defTx: Omit<Transaction, 'id' | 'uid' | 'createdAt'> = {
-  title: '', category: '', amount: 0, date: new Date().toISOString().split('T')[0], type: 'expense',
+const defTx = {
+  title: '', category: '', amount: '' as any,
+  date: new Date().toISOString().split('T')[0],
+  type: 'expense' as 'income' | 'expense',
+  debtId: '', businessId: '',
 };
-const defDebt: Omit<Debt, 'id' | 'uid' | 'createdAt'> = {
-  title: '', type: 'Personal Loan', totalAmount: 0, remainingBalance: 0,
-  interestRate: 0, monthlyPayment: 0, dueDate: '',
+const defDebt = {
+  title: '', type: 'Personal Loan' as Debt['type'],
+  totalAmount: '' as any, remainingBalance: '' as any,
+  interestRate: '' as any, monthlyPayment: '' as any, dueDate: '',
 };
-const defBiz: Omit<Business, 'id' | 'uid' | 'createdAt'> = {
-  name: '', type: 'Other', description: '', status: 'Active',
-};
+const defBiz = { name: '', type: 'Other' as Business['type'], description: '', status: 'Active' as Business['status'] };
 
 export default function FinancePage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -48,14 +46,13 @@ export default function FinancePage() {
   const [showSim, setShowSim]           = useState(false);
   const [tab, setTab]                   = useState<Tab>('transactions');
 
-  /* form state */
   const [showTxForm, setShowTxForm]     = useState(false);
-  const [txForm, setTxForm]             = useState({ ...defTx, amount: '' as any });
+  const [txForm, setTxForm]             = useState({ ...defTx });
   const [txLoading, setTxLoading]       = useState(false);
   const [editTxId, setEditTxId]         = useState<string | null>(null);
 
   const [showDebtForm, setShowDebtForm] = useState(false);
-  const [debtForm, setDebtForm]         = useState({ ...defDebt, totalAmount: '' as any, remainingBalance: '' as any, interestRate: '' as any, monthlyPayment: '' as any });
+  const [debtForm, setDebtForm]         = useState({ ...defDebt });
   const [debtLoading, setDebtLoading]   = useState(false);
   const [editDebtId, setEditDebtId]     = useState<string | null>(null);
 
@@ -76,26 +73,50 @@ export default function FinancePage() {
     return () => unsubs.forEach(u => u());
   }, []);
 
+  /* ── derived ── */
+  const bizRevenue   = (bizId: string) => transactions.filter(t => t.businessId === bizId && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const debtPaid     = (debtId: string) => transactions.filter(t => t.debtId === debtId).reduce((s, t) => s + t.amount, 0);
+  const debtName     = (id?: string) => debts.find(d => d.id === id)?.title ?? '';
+  const bizName      = (id?: string) => businesses.find(b => b.id === id)?.name ?? '';
+
   /* ── Transactions CRUD ── */
   const saveTx = async () => {
     if (!txForm.title.trim() || !txForm.amount) return toast.error('กรอกข้อมูลให้ครบ');
     setTxLoading(true);
     try {
-      const data = { ...txForm, amount: +txForm.amount, uid: UID };
+      const amount = +txForm.amount;
+      const data: any = {
+        title: txForm.title, category: txForm.category,
+        amount, date: txForm.date, type: txForm.type, uid: UID,
+        ...(txForm.debtId     ? { debtId: txForm.debtId }         : {}),
+        ...(txForm.businessId ? { businessId: txForm.businessId } : {}),
+      };
+
       if (editTxId) {
         await updateDoc(doc(db, 'transactions', editTxId), data);
         toast.success('แก้ไขแล้ว');
       } else {
         await addDoc(collection(db, 'transactions'), { ...data, createdAt: serverTimestamp() });
-        toast.success('เพิ่มรายการแล้ว');
+
+        // ── Auto-reduce debt remaining balance ──
+        if (txForm.debtId && txForm.type === 'expense') {
+          const debt = debts.find(d => d.id === txForm.debtId);
+          if (debt) {
+            const newBalance = Math.max(0, debt.remainingBalance - amount);
+            await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
+            toast.success(`เพิ่มรายการแล้ว · หนี้ "${debt.title}" ลดเหลือ ฿${newBalance.toLocaleString()}`);
+          } else { toast.success('เพิ่มรายการแล้ว'); }
+        } else {
+          toast.success('เพิ่มรายการแล้ว');
+        }
       }
-      setTxForm({ ...defTx, amount: '' as any });
-      setShowTxForm(false); setEditTxId(null);
+      setTxForm({ ...defTx }); setShowTxForm(false); setEditTxId(null);
     } catch { toast.error('บันทึกไม่สำเร็จ'); }
     finally { setTxLoading(false); }
   };
+
   const editTx = (t: Transaction) => {
-    setTxForm({ title: t.title, category: t.category, amount: t.amount as any, date: t.date, type: t.type });
+    setTxForm({ title: t.title, category: t.category, amount: t.amount as any, date: t.date, type: t.type, debtId: t.debtId ?? '', businessId: t.businessId ?? '' });
     setEditTxId(t.id!); setShowTxForm(true); setTab('transactions');
   };
   const deleteTx = async (t: Transaction) => {
@@ -108,21 +129,10 @@ export default function FinancePage() {
     if (!debtForm.title.trim()) return toast.error('กรอกชื่อหนี้');
     setDebtLoading(true);
     try {
-      const data = {
-        ...debtForm,
-        totalAmount: +debtForm.totalAmount, remainingBalance: +debtForm.remainingBalance,
-        interestRate: +debtForm.interestRate, monthlyPayment: +debtForm.monthlyPayment,
-        uid: UID,
-      };
-      if (editDebtId) {
-        await updateDoc(doc(db, 'debts', editDebtId), data);
-        toast.success('แก้ไขแล้ว');
-      } else {
-        await addDoc(collection(db, 'debts'), { ...data, createdAt: serverTimestamp() });
-        toast.success('เพิ่มหนี้แล้ว');
-      }
-      setDebtForm({ ...defDebt, totalAmount: '' as any, remainingBalance: '' as any, interestRate: '' as any, monthlyPayment: '' as any });
-      setShowDebtForm(false); setEditDebtId(null);
+      const data = { ...debtForm, totalAmount: +debtForm.totalAmount, remainingBalance: +debtForm.remainingBalance, interestRate: +debtForm.interestRate, monthlyPayment: +debtForm.monthlyPayment, uid: UID };
+      if (editDebtId) { await updateDoc(doc(db, 'debts', editDebtId), data); toast.success('แก้ไขแล้ว'); }
+      else { await addDoc(collection(db, 'debts'), { ...data, createdAt: serverTimestamp() }); toast.success('เพิ่มหนี้แล้ว'); }
+      setDebtForm({ ...defDebt }); setShowDebtForm(false); setEditDebtId(null);
     } catch { toast.error('บันทึกไม่สำเร็จ'); }
     finally { setDebtLoading(false); }
   };
@@ -141,15 +151,9 @@ export default function FinancePage() {
     setBizLoading(true);
     try {
       const data = { ...bizForm, uid: UID };
-      if (editBizId) {
-        await updateDoc(doc(db, 'businesses', editBizId), data);
-        toast.success('แก้ไขแล้ว');
-      } else {
-        await addDoc(collection(db, 'businesses'), { ...data, createdAt: serverTimestamp() });
-        toast.success('เพิ่มธุรกิจแล้ว');
-      }
-      setBizForm({ ...defBiz });
-      setShowBizForm(false); setEditBizId(null);
+      if (editBizId) { await updateDoc(doc(db, 'businesses', editBizId), data); toast.success('แก้ไขแล้ว'); }
+      else { await addDoc(collection(db, 'businesses'), { ...data, createdAt: serverTimestamp() }); toast.success('เพิ่มธุรกิจแล้ว'); }
+      setBizForm({ ...defBiz }); setShowBizForm(false); setEditBizId(null);
     } catch { toast.error('บันทึกไม่สำเร็จ'); }
     finally { setBizLoading(false); }
   };
@@ -162,6 +166,7 @@ export default function FinancePage() {
     catch { toast.error('ลบไม่สำเร็จ'); }
   };
 
+  /* ── summary ── */
   const totalIncome   = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const totalDebt     = debts.reduce((s, d) => s + d.remainingBalance, 0);
@@ -172,12 +177,15 @@ export default function FinancePage() {
     return <MiroFishSimulator title="Finance Forecast" seedText={seed} onBack={() => setShowSim(false)} />;
   }
 
-  /* ── tab add button config ── */
   const addBtnConfig: Record<Tab, { label: string; action: () => void }> = {
-    transactions: { label: '+ Transaction', action: () => { setEditTxId(null); setTxForm({ ...defTx, amount: '' as any }); setShowTxForm(v => !v); } },
-    debts:        { label: '+ Debt',        action: () => { setEditDebtId(null); setDebtForm({ ...defDebt, totalAmount: '' as any, remainingBalance: '' as any, interestRate: '' as any, monthlyPayment: '' as any }); setShowDebtForm(v => !v); } },
+    transactions: { label: '+ Transaction', action: () => { setEditTxId(null); setTxForm({ ...defTx }); setShowTxForm(v => !v); } },
+    debts:        { label: '+ Debt',        action: () => { setEditDebtId(null); setDebtForm({ ...defDebt }); setShowDebtForm(v => !v); } },
     businesses:   { label: '+ Business',    action: () => { setEditBizId(null); setBizForm({ ...defBiz }); setShowBizForm(v => !v); } },
   };
+
+  /* ── options for link dropdowns ── */
+  const debtOptions    = [{ value: '', label: '— ไม่ระบุ —' }, ...debts.map(d => ({ value: d.id!, label: d.title }))];
+  const bizOptions     = [{ value: '', label: '— ไม่ระบุ —' }, ...businesses.map(b => ({ value: b.id!, label: b.name }))];
 
   return (
     <div className="max-w-4xl space-y-5">
@@ -188,30 +196,26 @@ export default function FinancePage() {
           <p className="text-sm" style={{ color: 'var(--color-muted)' }}>Income, expenses & debts</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={addBtnConfig[tab].action}
+          <button onClick={addBtnConfig[tab].action}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 hover:brightness-110"
-            style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-          >
+            style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
             <Plus size={15} /> {addBtnConfig[tab].label}
           </button>
-          <button
-            onClick={() => setShowSim(true)}
+          <button onClick={() => setShowSim(true)}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-150 active:scale-95 hover:brightness-110"
-            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}
-          >
+            style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)' }}>
             <Fish size={15} /> MiroFish AI
           </button>
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: 'Income',   value: totalIncome,   color: '#22c55e', icon: <TrendingUp size={16} /> },
-          { label: 'Expenses', value: totalExpenses, color: '#ef4444', icon: <TrendingDown size={16} /> },
-          { label: 'Net Cash', value: netCash,       color: netCash >= 0 ? '#22c55e' : '#ef4444', icon: <Wallet size={16} /> },
-          { label: 'Total Debt', value: totalDebt,   color: '#f59e0b', icon: <Wallet size={16} /> },
+          { label: 'Income',     value: totalIncome,   color: '#22c55e', icon: <TrendingUp size={16} /> },
+          { label: 'Expenses',   value: totalExpenses, color: '#ef4444', icon: <TrendingDown size={16} /> },
+          { label: 'Net Cash',   value: netCash,       color: netCash >= 0 ? '#22c55e' : '#ef4444', icon: <Wallet size={16} /> },
+          { label: 'Total Debt', value: totalDebt,     color: '#f59e0b', icon: <Wallet size={16} /> },
         ].map(c => (
           <div key={c.label} className="rounded-xl p-3 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
             <div className="flex items-center gap-1.5 mb-1">
@@ -250,7 +254,8 @@ export default function FinancePage() {
                 </div>
                 <div>
                   <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>ประเภท</label>
-                  <CustomSelect value={txForm.type} onChange={v => setTxForm(p => ({ ...p, type: v as any, category: '' }))}
+                  <CustomSelect value={txForm.type}
+                    onChange={v => setTxForm(p => ({ ...p, type: v as any, category: '', debtId: '', businessId: '' }))}
                     options={[{ value: 'expense', label: '🔴 รายจ่าย' }, { value: 'income', label: '🟢 รายรับ' }]} />
                 </div>
                 <div>
@@ -268,6 +273,28 @@ export default function FinancePage() {
                   <input type="date" value={txForm.date} onChange={e => setTxForm(p => ({ ...p, date: e.target.value }))}
                     className={inputCls} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
                 </div>
+
+                {/* ── Link to Debt (expense only) ── */}
+                {txForm.type === 'expense' && debts.length > 0 && (
+                  <div className="col-span-2">
+                    <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: '#f59e0b' }}>
+                      <Link size={11} /> เชื่อมกับหนี้ (ลด remaining balance อัตโนมัติ)
+                    </label>
+                    <CustomSelect value={txForm.debtId} onChange={v => setTxForm(p => ({ ...p, debtId: v }))}
+                      options={debtOptions} />
+                  </div>
+                )}
+
+                {/* ── Link to Business (income only) ── */}
+                {txForm.type === 'income' && businesses.length > 0 && (
+                  <div className="col-span-2">
+                    <label className="block text-xs mb-1 flex items-center gap-1" style={{ color: '#22c55e' }}>
+                      <Link size={11} /> เชื่อมกับธุรกิจ (นับรายได้รวมต่อธุรกิจ)
+                    </label>
+                    <CustomSelect value={txForm.businessId} onChange={v => setTxForm(p => ({ ...p, businessId: v }))}
+                      options={bizOptions} />
+                  </div>
+                )}
               </div>
               <div className="flex gap-2">
                 <button onClick={saveTx} disabled={txLoading}
@@ -290,17 +317,29 @@ export default function FinancePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ background: 'var(--color-surface)' }}>
-                      {['วันที่', 'ชื่อ', 'หมวด', 'ประเภท', 'จำนวน', ''].map(h => (
+                      {['วันที่', 'ชื่อ', 'หมวด / เชื่อมกับ', 'ประเภท', 'จำนวน', ''].map(h => (
                         <th key={h} className="text-left px-4 py-3 text-xs font-medium" style={{ color: 'var(--color-muted)' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {transactions.map(t => (
-                      <tr key={t.id} className="border-t group" style={{ borderColor: 'var(--color-border)' }}>
+                      <tr key={t.id} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                         <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{t.date}</td>
                         <td className="px-4 py-3 font-medium" style={{ color: 'var(--color-text)' }}>{t.title}</td>
-                        <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-muted)' }}>{t.category}</td>
+                        <td className="px-4 py-3 text-xs">
+                          <div style={{ color: 'var(--color-muted)' }}>{t.category}</div>
+                          {t.debtId && (
+                            <div className="flex items-center gap-1 mt-0.5" style={{ color: '#f59e0b' }}>
+                              <Link size={10} />{debtName(t.debtId)}
+                            </div>
+                          )}
+                          {t.businessId && (
+                            <div className="flex items-center gap-1 mt-0.5" style={{ color: '#22c55e' }}>
+                              <Link size={10} />{bizName(t.businessId)}
+                            </div>
+                          )}
+                        </td>
                         <td className="px-4 py-3">
                           <span className="text-xs px-2 py-0.5 rounded-full"
                             style={{ background: t.type === 'income' ? '#22c55e22' : '#ef444422', color: t.type === 'income' ? '#22c55e' : '#ef4444' }}>
@@ -313,13 +352,9 @@ export default function FinancePage() {
                         <td className="px-4 py-3">
                           <div className="flex gap-1">
                             <button onClick={() => editTx(t)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                              style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>
-                              <Pencil size={12} />
-                            </button>
+                              style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
                             <button onClick={() => deleteTx(t)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                              style={{ background: '#ef444422', color: '#ef4444' }}>
-                              <Trash2 size={12} />
-                            </button>
+                              style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
                           </div>
                         </td>
                       </tr>
@@ -390,39 +425,50 @@ export default function FinancePage() {
 
           {debts.length === 0
             ? <div className="text-sm text-center py-8" style={{ color: 'var(--color-muted)' }}>ยังไม่มีหนี้ — กด + Debt</div>
-            : debts.map(d => (
-              <div key={d.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <span className="font-medium" style={{ color: 'var(--color-text)' }}>{d.title}</span>
-                    <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>{d.type}</span>
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={() => editDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                      style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
-                    <button onClick={() => deleteDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                      style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
-                  </div>
-                </div>
-                {/* Progress bar */}
-                {d.totalAmount > 0 && (
-                  <div className="mb-3">
-                    <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
-                      <span>คงเหลือ ฿{d.remainingBalance?.toLocaleString()}</span>
-                      <span>{Math.round((1 - d.remainingBalance / d.totalAmount) * 100)}% ชำระแล้ว</span>
+            : debts.map(d => {
+              const paid      = debtPaid(d.id!);
+              const paidPct   = d.totalAmount > 0 ? Math.min(100, Math.round((1 - d.remainingBalance / d.totalAmount) * 100)) : 0;
+              const linkedTxs = transactions.filter(t => t.debtId === d.id);
+              return (
+                <div key={d.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <span className="font-medium" style={{ color: 'var(--color-text)' }}>{d.title}</span>
+                      <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>{d.type}</span>
                     </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
-                      <div className="h-full rounded-full" style={{ width: `${Math.round((1 - d.remainingBalance / d.totalAmount) * 100)}%`, background: '#22c55e' }} />
+                    <div className="flex gap-1">
+                      <button onClick={() => editDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
+                        style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
+                      <button onClick={() => deleteDebt(d)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
+                        style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
                     </div>
                   </div>
-                )}
-                <div className="grid grid-cols-3 gap-3 text-xs">
-                  <div><span style={{ color: 'var(--color-muted)' }}>ดอกเบี้ย</span><br /><span style={{ color: 'var(--color-text)' }}>{d.interestRate}%/ปี</span></div>
-                  <div><span style={{ color: 'var(--color-muted)' }}>ค่างวด</span><br /><span style={{ color: 'var(--color-text)' }}>฿{d.monthlyPayment?.toLocaleString()}</span></div>
-                  <div><span style={{ color: 'var(--color-muted)' }}>ครบกำหนด</span><br /><span style={{ color: 'var(--color-text)' }}>{d.dueDate || '—'}</span></div>
+                  {d.totalAmount > 0 && (
+                    <div className="mb-3">
+                      <div className="flex justify-between text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
+                        <span>คงเหลือ ฿{d.remainingBalance?.toLocaleString()}</span>
+                        <span>{paidPct}% ชำระแล้ว</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${paidPct}%`, background: '#22c55e' }} />
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-3 text-xs mb-2">
+                    <div><span style={{ color: 'var(--color-muted)' }}>ดอกเบี้ย</span><br /><span style={{ color: 'var(--color-text)' }}>{d.interestRate}%/ปี</span></div>
+                    <div><span style={{ color: 'var(--color-muted)' }}>ค่างวด</span><br /><span style={{ color: 'var(--color-text)' }}>฿{d.monthlyPayment?.toLocaleString()}</span></div>
+                    <div><span style={{ color: 'var(--color-muted)' }}>ครบกำหนด</span><br /><span style={{ color: 'var(--color-text)' }}>{d.dueDate || '—'}</span></div>
+                  </div>
+                  {/* Linked transactions summary */}
+                  {linkedTxs.length > 0 && (
+                    <div className="pt-2 border-t text-xs flex items-center gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}>
+                      <Link size={11} style={{ color: '#f59e0b' }} />
+                      <span style={{ color: '#f59e0b' }}>ชำระจาก Transactions {linkedTxs.length} ครั้ง · ฿{paid.toLocaleString()} รวม</span>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
       )}
 
@@ -470,24 +516,38 @@ export default function FinancePage() {
 
           {businesses.length === 0
             ? <div className="text-sm text-center py-8" style={{ color: 'var(--color-muted)' }}>ยังไม่มีธุรกิจ — กด + Business</div>
-            : businesses.map(b => (
-              <div key={b.id} className="rounded-xl p-4 border flex justify-between items-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <div>
-                  <div className="font-medium" style={{ color: 'var(--color-text)' }}>{b.name}</div>
-                  <div className="text-xs" style={{ color: 'var(--color-muted)' }}>{b.type}{b.description ? ` · ${b.description}` : ''}</div>
+            : businesses.map(b => {
+              const revenue   = bizRevenue(b.id!);
+              const linkedTxs = transactions.filter(t => t.businessId === b.id);
+              return (
+                <div key={b.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="font-medium" style={{ color: 'var(--color-text)' }}>{b.name}</div>
+                      <div className="text-xs" style={{ color: 'var(--color-muted)' }}>{b.type}{b.description ? ` · ${b.description}` : ''}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: b.status === 'Active' ? '#22c55e22' : '#64748b22', color: b.status === 'Active' ? '#22c55e' : '#64748b' }}>
+                        {b.status}
+                      </span>
+                      <button onClick={() => editBiz(b)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
+                        style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
+                      <button onClick={() => deleteBiz(b)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
+                        style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
+                    </div>
+                  </div>
+                  {/* Linked revenue */}
+                  {linkedTxs.length > 0 && (
+                    <div className="mt-3 pt-3 border-t flex items-center gap-2 text-xs" style={{ borderColor: 'var(--color-border)' }}>
+                      <Link size={11} style={{ color: '#22c55e' }} />
+                      <span style={{ color: '#22c55e' }}>รายได้รวมจาก Transactions {linkedTxs.length} รายการ</span>
+                      <span className="ml-auto font-semibold" style={{ color: '#22c55e' }}>฿{revenue.toLocaleString()}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs px-2 py-0.5 rounded-full"
-                    style={{ background: b.status === 'Active' ? '#22c55e22' : '#64748b22', color: b.status === 'Active' ? '#22c55e' : '#64748b' }}>
-                    {b.status}
-                  </span>
-                  <button onClick={() => editBiz(b)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                    style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}><Pencil size={12} /></button>
-                  <button onClick={() => deleteBiz(b)} className="p-1.5 rounded-lg transition-all active:scale-90 hover:brightness-110"
-                    style={{ background: '#ef444422', color: '#ef4444' }}><Trash2 size={12} /></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
         </div>
       )}
     </div>
