@@ -361,25 +361,32 @@ export default function FinancePage() {
                       <CustomSelect value={txForm.debtId} onChange={v => setTxForm(p => ({ ...p, debtId: v, principalOnly: false }))}
                         options={debtOptions} />
                     </div>
-                    {txForm.debtId && (
-                      <label className="flex items-center gap-2 cursor-pointer select-none px-3 py-2 rounded-lg"
-                        style={{ background: txForm.principalOnly ? '#22c55e22' : 'var(--color-bg)', border: `1px solid ${txForm.principalOnly ? '#22c55e' : 'var(--color-border)'}` }}>
-                        <input
-                          type="checkbox"
-                          checked={txForm.principalOnly}
-                          onChange={e => setTxForm(p => ({ ...p, principalOnly: e.target.checked }))}
-                          className="w-4 h-4 accent-green-500"
-                        />
-                        <div>
-                          <div className="text-xs font-medium" style={{ color: txForm.principalOnly ? '#22c55e' : 'var(--color-text)' }}>
-                            โปะเงินต้น (ไม่หักดอกเบี้ย)
-                          </div>
-                          <div className="text-xs" style={{ color: 'var(--color-muted)' }}>
-                            ตัดเงินต้นทั้งจำนวน — ใช้เมื่อจ่ายดอกเบี้ยงวดนั้นไปแล้ว
-                          </div>
+                    {/* Principal-only checkbox — always visible, disabled until a debt is chosen */}
+                    <label
+                      className="flex items-center gap-2 select-none px-3 py-2 rounded-lg transition-all duration-150"
+                      style={{
+                        cursor: txForm.debtId ? 'pointer' : 'not-allowed',
+                        opacity: txForm.debtId ? 1 : 0.4,
+                        background: txForm.principalOnly ? '#22c55e22' : 'var(--color-bg)',
+                        border: `1px solid ${txForm.principalOnly ? '#22c55e' : 'var(--color-border)'}`,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        disabled={!txForm.debtId}
+                        checked={txForm.principalOnly}
+                        onChange={e => setTxForm(p => ({ ...p, principalOnly: e.target.checked }))}
+                        className="w-4 h-4 accent-green-500 flex-shrink-0"
+                      />
+                      <div>
+                        <div className="text-xs font-medium" style={{ color: txForm.principalOnly ? '#22c55e' : 'var(--color-text)' }}>
+                          โปะเงินต้น (ไม่หักดอกเบี้ย)
                         </div>
-                      </label>
-                    )}
+                        <div className="text-xs" style={{ color: 'var(--color-muted)' }}>
+                          {txForm.debtId ? 'ตัดเงินต้นทั้งจำนวน — ใช้เมื่อจ่ายดอกเบี้ยงวดนั้นไปแล้ว' : 'เลือกหนี้ก่อน'}
+                        </div>
+                      </div>
+                    </label>
                   </div>
                 )}
 
