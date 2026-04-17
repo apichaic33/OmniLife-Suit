@@ -7,20 +7,44 @@ import {
 import { clsx } from 'clsx';
 
 interface NavItem { id: Page; label: string; icon: ReactNode; mirofish?: boolean; }
+interface NavGroup { label: string | null; items: NavItem[] }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard',   label: 'Dashboard',   icon: <LayoutDashboard size={18} /> },
-  { id: 'trade',       label: 'Trade',       icon: <TrendingUp size={18} /> },
-  { id: 'finance',     label: 'Finance',     icon: <Wallet size={18} /> },
-  { id: 'tasks',       label: 'Tasks',       icon: <CheckSquare size={18} /> },
-  { id: 'fitness',     label: 'Fitness',     icon: <Dumbbell size={18} /> },
-  { id: 'projects',    label: 'Projects',    icon: <FolderKanban size={18} /> },
-  { id: 'agriculture', label: 'Agriculture', icon: <Sprout size={18} /> },
-  { id: 'assets',      label: 'Assets',      icon: <Package size={18} /> },
-  { id: 'mirofish',    label: 'MiroFish AI', icon: <Fish size={18} />, mirofish: true },
-  { id: 'analytics',   label: 'Analytics',   icon: <BarChart2 size={18} /> },
-  { id: 'scanner',     label: 'Scanner',     icon: <ScanSearch size={18} /> },
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: null,
+    items: [
+      { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+    ],
+  },
+  {
+    label: 'FINANCE & TRADE',
+    items: [
+      { id: 'scanner',   label: 'Scanner',   icon: <ScanSearch size={18} /> },
+      { id: 'trade',     label: 'Trade',     icon: <TrendingUp size={18} /> },
+      { id: 'finance',   label: 'Finance',   icon: <Wallet size={18} /> },
+      { id: 'assets',    label: 'Assets',    icon: <Package size={18} /> },
+      { id: 'analytics', label: 'Analytics', icon: <BarChart2 size={18} /> },
+    ],
+  },
+  {
+    label: 'PERSONAL OS',
+    items: [
+      { id: 'tasks',       label: 'Tasks',       icon: <CheckSquare size={18} /> },
+      { id: 'fitness',     label: 'Fitness',     icon: <Dumbbell size={18} /> },
+      { id: 'projects',    label: 'Projects',    icon: <FolderKanban size={18} /> },
+      { id: 'agriculture', label: 'Agriculture', icon: <Sprout size={18} /> },
+    ],
+  },
+  {
+    label: 'AI',
+    items: [
+      { id: 'mirofish', label: 'MiroFish AI', icon: <Fish size={18} />, mirofish: true },
+    ],
+  },
 ];
+
+// flat list for mobile header lookup
+const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap(g => g.items);
 
 interface Props {
   currentPage: Page;
@@ -67,31 +91,43 @@ export default function Layout({ currentPage, onNavigate, children }: Props) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {NAV_ITEMS.map(item => (
-          <button
-            key={item.id}
-            onClick={() => navigate(item.id)}
-            className={clsx(
-              'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
-              currentPage === item.id ? 'text-white font-medium' : 'hover:bg-white/5',
-              item.mirofish && currentPage !== item.id && 'border border-dashed'
+      <nav className="flex-1 p-3 overflow-y-auto space-y-3">
+        {NAV_GROUPS.map((group, gi) => (
+          <div key={gi}>
+            {group.label && (
+              <div className="px-2 pt-1 pb-1.5 text-xs font-semibold tracking-widest"
+                style={{ color: 'var(--color-muted)', opacity: 0.5 }}>
+                {group.label}
+              </div>
             )}
-            style={{
-              background: currentPage === item.id
-                ? (item.mirofish ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--color-accent)')
-                : undefined,
-              color: currentPage === item.id ? '#fff' : item.mirofish ? '#a78bfa' : 'var(--color-muted)',
-              borderColor: item.mirofish && currentPage !== item.id ? '#6366f133' : undefined,
-            }}
-          >
-            {item.icon}
-            <span>{item.label}</span>
-            {item.mirofish && currentPage !== item.id && (
-              <span className="ml-auto text-xs px-1 rounded"
-                style={{ background: '#6366f122', color: '#a78bfa' }}>AI</span>
-            )}
-          </button>
+            <div className="space-y-0.5">
+              {group.items.map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => navigate(item.id)}
+                  className={clsx(
+                    'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all',
+                    currentPage === item.id ? 'text-white font-medium' : 'hover:bg-white/5',
+                    item.mirofish && currentPage !== item.id && 'border border-dashed'
+                  )}
+                  style={{
+                    background: currentPage === item.id
+                      ? (item.mirofish ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'var(--color-accent)')
+                      : undefined,
+                    color: currentPage === item.id ? '#fff' : item.mirofish ? '#a78bfa' : 'var(--color-muted)',
+                    borderColor: item.mirofish && currentPage !== item.id ? '#6366f133' : undefined,
+                  }}
+                >
+                  {item.icon}
+                  <span>{item.label}</span>
+                  {item.mirofish && currentPage !== item.id && (
+                    <span className="ml-auto text-xs px-1 rounded"
+                      style={{ background: '#6366f122', color: '#a78bfa' }}>AI</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </nav>
 
