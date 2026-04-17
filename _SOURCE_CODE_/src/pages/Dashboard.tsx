@@ -1,16 +1,40 @@
 import { useEffect, useState } from 'react';
 import { type Page } from '../App';
-import { TrendingUp, Wallet, CheckSquare, Sprout, Fish, Activity } from 'lucide-react';
+import { TrendingUp, Wallet, CheckSquare, Sprout, Fish, Activity, Sparkles, Loader2 } from 'lucide-react';
 import { checkMiroFishHealth } from '../lib/mirofish';
+import { fetchPrices } from '../lib/market';
+import { getDailyBrief, getGeminiKey } from '../lib/gemini';
 
 interface Props { onNavigate: (page: Page) => void; }
 
 export default function Dashboard({ onNavigate }: Props) {
   const [miroFishOnline, setMiroFishOnline] = useState<boolean | null>(null);
+  const [briefText, setBriefText]     = useState('');
+  const [briefLoading, setBriefLoading] = useState(false);
 
   useEffect(() => {
     checkMiroFishHealth().then(setMiroFishOnline);
   }, []);
+
+  const handleDailyBrief = async () => {
+    if (!getGeminiKey()) {
+      setBriefText('⚠️ ยังไม่ได้ตั้ง Gemini API Key — ไปที่ Scanner > ⚙️ API Keys เพื่อตั้งค่า');
+      return;
+    }
+    setBriefLoading(true);
+    try {
+      const priceData = await fetchPrices(['BTC/USDT', 'ETH/USDT', 'XAU/USD']).catch(() => ({}));
+      const lines = Object.entries(priceData)
+        .map(([sym, p]) => `${sym}: $${p.usd.toLocaleString('en-US', { maximumFractionDigits: 2 })} (${p.usd_24h_change >= 0 ? '+' : ''}${p.usd_24h_change.toFixed(2)}% 24h)`)
+        .join('\n');
+      const text = await getDailyBrief(lines || undefined);
+      setBriefText(text);
+    } catch {
+      setBriefText('ไม่สามารถติดต่อ Gemini ได้ — ตรวจสอบ API Key');
+    } finally {
+      setBriefLoading(false);
+    }
+  };
 
   const cards = [
     { id: 'trade' as Page,       label: 'Trade',       icon: <TrendingUp size={22} />,  color: '#22c55e', desc: 'Simulate market sentiment' },
@@ -74,6 +98,36 @@ export default function Dashboard({ onNavigate }: Props) {
             <p className="text-sm" style={{ color: 'var(--color-muted)' }}>{card.desc}</p>
           </button>
         ))}
+      </div>
+
+      {/* Gemini Daily Brief */}
+      <div className="rounded-xl p-4 border space-y-3"
+        style={{ background: 'var(--color-surface)', borderColor: '#6366f133' }}>
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-lg" style={{ background: '#6366f122' }}>
+            <Sparkles size={20} style={{ color: '#a78bfa' }} />
+          </div>
+          <div className="flex-1">
+            <div className="font-semibold text-sm" style={{ color: 'var(--color-text)' }}>Gemini AI Daily Brief</div>
+            <div className="text-xs" style={{ color: 'var(--color-muted)' }}>สรุปภาพรวมตลาด + คำแนะนำประจำวัน</div>
+          </div>
+          <button
+            onClick={handleDailyBrief}
+            disabled={briefLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition active:scale-95 hover:brightness-110 disabled:opacity-60"
+            style={{ background: '#6366f133', color: '#a78bfa', border: '1px solid #6366f144' }}
+          >
+            {briefLoading
+              ? <><Loader2 size={12} className="animate-spin" /> กำลังโหลด...</>
+              : <><Sparkles size={12} /> {briefText ? 'รีเฟรช' : 'Generate Brief'}</>}
+          </button>
+        </div>
+        {briefText && (
+          <div className="text-sm leading-relaxed whitespace-pre-line pt-1 border-t"
+            style={{ color: 'var(--color-text)', borderColor: 'var(--color-border)' }}>
+            {briefText}
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}

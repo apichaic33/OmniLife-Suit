@@ -5,11 +5,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, X, RefreshCw, TrendingUp, TrendingDown, Minus,
   ChevronDown, ChevronUp, Loader2, AlertTriangle, Target,
-  BarChart2, Activity, Zap,
+  BarChart2, Activity, Zap, Sparkles, Newspaper, Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { fetchPrices, type PriceData } from '../lib/market';
+import { fetchPrices, getAVKey, type PriceData } from '../lib/market';
 import { analyzeAsset, type AssetAnalysis, type SignalItem, type BacktestResult } from '../lib/analysis';
+import { fetchNewsSentiment, getCPKey, setCPKey, type NewsSentiment } from '../lib/news';
+import { getGeminiKey, setGeminiKey, getScannerSummary } from '../lib/gemini';
 
 // ── Persisted watchlist in localStorage ─────────────────────
 const STORAGE_KEY = 'omnilife_scanner_favorites';
@@ -145,8 +147,42 @@ function BacktestCard({ bt, isBest }: { bt: BacktestResult; isBest: boolean }) {
   );
 }
 
+// ── News Sentiment Card ──────────────────────────────────────
+function NewsCard({ news }: { news: NewsSentiment }) {
+  const color = news.score > 0.1 ? '#22c55e' : news.score < -0.1 ? '#ef4444' : '#f59e0b';
+  const barPct = Math.round((news.score + 1) / 2 * 100);
+  return (
+    <div className="p-4 rounded-xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Newspaper size={15} style={{ color: '#6366f1' }} />
+        <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+          News Sentiment
+        </span>
+        <span className="ml-auto text-xs px-2 py-0.5 rounded-full"
+          style={{ background: '#6366f122', color: '#a78bfa' }}>{news.source}</span>
+      </div>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-base font-bold" style={{ color }}>{news.label}</span>
+        <span className="text-xs" style={{ color: 'var(--color-muted)' }}>{news.articles} articles</span>
+      </div>
+      <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--color-border)' }}>
+        <div className="h-full rounded-full transition-all duration-500"
+          style={{ width: `${barPct}%`, background: color }} />
+      </div>
+      <div className="flex justify-between text-xs mt-1" style={{ color: 'var(--color-muted)' }}>
+        <span>Bearish</span><span>Neutral</span><span>Bullish</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Analysis Panel ───────────────────────────────────────────
-function AnalysisPanel({ analysis }: { analysis: AssetAnalysis }) {
+function AnalysisPanel({ analysis, geminiText, geminiLoading, onAskGemini }: {
+  analysis: AssetAnalysis;
+  geminiText: string;
+  geminiLoading: boolean;
+  onAskGemini: () => void;
+}) {
   const [showFib, setShowFib] = useState(false);
   const dc = dirColor(analysis.direction);
 
@@ -366,6 +402,45 @@ function AnalysisPanel({ analysis }: { analysis: AssetAnalysis }) {
           </div>
         </div>
       )}
+
+      {/* News Sentiment */}
+      {analysis.newsSentiment && <NewsCard news={analysis.newsSentiment} />}
+
+      {/* Gemini AI Summary */}
+      <div className="p-4 rounded-xl border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles size={15} style={{ color: '#a78bfa' }} />
+          <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>Gemini AI Summary</span>
+          <span className="ml-auto text-xs px-2 py-0.5 rounded-full"
+            style={{ background: '#6366f122', color: '#a78bfa' }}>Gemini 2.0 Flash</span>
+        </div>
+
+        {geminiText ? (
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--color-text)' }}>{geminiText}</p>
+        ) : (
+          <button
+            onClick={onAskGemini}
+            disabled={geminiLoading}
+            className="w-full py-2.5 rounded-lg text-sm font-medium transition-all active:scale-95 hover:brightness-110 disabled:opacity-60 flex items-center justify-center gap-2"
+            style={{ background: '#6366f122', color: '#a78bfa', border: '1px solid #6366f144' }}
+          >
+            {geminiLoading
+              ? <><Loader2 size={14} className="animate-spin" /> กำลังวิเคราะห์...</>
+              : <><Sparkles size={14} /> วิเคราะห์ด้วย Gemini AI</>}
+          </button>
+        )}
+
+        {geminiText && (
+          <button
+            onClick={onAskGemini}
+            disabled={geminiLoading}
+            className="mt-2 text-xs transition hover:opacity-70 disabled:opacity-40 flex items-center gap-1"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            <RefreshCw size={11} className={geminiLoading ? 'animate-spin' : ''} /> วิเคราะห์ใหม่
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -379,6 +454,15 @@ export default function ScannerPage() {
   const [activePair, setActivePair] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AssetAnalysis | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+
+  // API Keys
+  const [showKeySetup, setShowKeySetup] = useState(false);
+  const [geminiKeyInput, setGeminiKeyInput] = useState(() => getGeminiKey());
+  const [cpKeyInput, setCpKeyInput] = useState(() => getCPKey());
+
+  // Gemini summary
+  const [geminiText, setGeminiText] = useState('');
+  const [geminiLoading, setGeminiLoading] = useState(false);
 
   // Persist favorites
   useEffect(() => { saveFavorites(favorites); }, [favorites]);
@@ -417,9 +501,14 @@ export default function ScannerPage() {
     if (!meta) { toast.error('ยังไม่มีราคา — กด Refresh ก่อน'); return; }
     setActivePair(pair);
     setAnalysis(null);
+    setGeminiText('');
     setAnalyzing(true);
     try {
-      const result = await analyzeAsset(pair, meta.usd, meta.usd_24h_change);
+      const base = pair.split('/')[0].toUpperCase();
+      // Fetch news sentiment first (fast, graceful fallback), then run full analysis
+      const newsMap = await fetchNewsSentiment([pair], getAVKey()).catch(() => ({}));
+      const news = (newsMap as Record<string, NewsSentiment>)[base];
+      const result = await analyzeAsset(pair, meta.usd, meta.usd_24h_change, news);
       setAnalysis(result);
     } catch (e) {
       toast.error('วิเคราะห์ไม่สำเร็จ');
@@ -429,16 +518,97 @@ export default function ScannerPage() {
     }
   };
 
+  const handleAskGemini = async () => {
+    if (!analysis) return;
+    if (!getGeminiKey()) { toast.error('ยังไม่ได้ตั้ง Gemini API Key — กด ⚙️ Settings'); return; }
+    setGeminiLoading(true);
+    try {
+      const text = await getScannerSummary(analysis);
+      setGeminiText(text);
+    } catch (e: any) {
+      if (e.message === 'NO_KEY') toast.error('ยังไม่ได้ตั้ง Gemini API Key');
+      else toast.error('Gemini ไม่ตอบสนอง — ตรวจสอบ API Key');
+    } finally {
+      setGeminiLoading(false);
+    }
+  };
+
+  const saveKeys = () => {
+    setGeminiKey(geminiKeyInput);
+    setCPKey(cpKeyInput);
+    setShowKeySetup(false);
+    toast.success('บันทึก API Keys แล้ว');
+  };
+
   return (
     <div className="max-w-4xl space-y-5">
 
       {/* Page header */}
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: 'var(--color-text)' }}>Scanner & Signal Engine</h1>
-        <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
-          วิเคราะห์ทิศทางทรัพย์สิน · RSI · EMA · Bollinger Bands · Fibonacci · Backtest 3 กลยุทธ์
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: 'var(--color-text)' }}>Scanner & Signal Engine</h1>
+          <p className="text-sm" style={{ color: 'var(--color-muted)' }}>
+            วิเคราะห์ทิศทางทรัพย์สิน · RSI · EMA · BB · Fibonacci · News · Gemini AI
+          </p>
+        </div>
+        <button
+          onClick={() => setShowKeySetup(v => !v)}
+          className="flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition hover:brightness-110"
+          style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)', color: 'var(--color-muted)' }}
+        >
+          <Settings size={13} /> API Keys
+        </button>
       </div>
+
+      {/* API Key Setup panel */}
+      {showKeySetup && (
+        <div className="p-4 rounded-xl border space-y-3" style={{ background: 'var(--color-surface)', borderColor: '#6366f144' }}>
+          <p className="text-xs font-semibold" style={{ color: '#a78bfa' }}>⚙️ API Keys — เก็บใน localStorage เท่านั้น</p>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
+                Gemini API Key — <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>aistudio.google.com</a>
+              </label>
+              <input
+                type="password"
+                value={geminiKeyInput}
+                onChange={e => setGeminiKeyInput(e.target.value)}
+                placeholder="AIza..."
+                className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
+                style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
+                CryptoPanic API Key — <a href="https://cryptopanic.com/developers/api/" target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>cryptopanic.com</a>
+              </label>
+              <input
+                type="password"
+                value={cpKeyInput}
+                onChange={e => setCpKeyInput(e.target.value)}
+                placeholder="your_token..."
+                className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
+                style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={saveKeys}
+              className="px-4 py-1.5 rounded-lg text-sm font-medium transition active:scale-95"
+              style={{ background: '#6366f133', color: '#a78bfa', border: '1px solid #6366f144' }}>
+              บันทึก
+            </button>
+            <button onClick={() => setShowKeySetup(false)}
+              className="px-4 py-1.5 rounded-lg text-sm transition"
+              style={{ color: 'var(--color-muted)' }}>
+              ยกเลิก
+            </button>
+          </div>
+          <p className="text-xs" style={{ color: 'var(--color-muted)' }}>
+            Alpha Vantage key ใช้ร่วมกับ Assets page (ตั้งค่าได้ที่นั่น)
+          </p>
+        </div>
+      )}
 
       {/* Add pair + Refresh */}
       <div className="flex gap-2">
@@ -530,7 +700,14 @@ export default function ScannerPage() {
       )}
 
       {/* Analysis result */}
-      {analysis && !analyzing && <AnalysisPanel analysis={analysis} />}
+      {analysis && !analyzing && (
+        <AnalysisPanel
+          analysis={analysis}
+          geminiText={geminiText}
+          geminiLoading={geminiLoading}
+          onAskGemini={handleAskGemini}
+        />
+      )}
 
       {/* Direction legend */}
       {favorites.length > 0 && !analysis && !analyzing && (

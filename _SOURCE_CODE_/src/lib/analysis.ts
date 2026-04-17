@@ -6,6 +6,7 @@ import {
   calcRSI, calcEMA, calcBollingerBands, calcATR,
   calcLinearRegression, calcFibLevels,
 } from './indicators';
+import type { NewsSentiment } from './news';
 
 export interface SignalItem {
   name: string;
@@ -66,6 +67,9 @@ export interface AssetAnalysis {
   // Strategy backtests
   backtestResults: BacktestResult[];
   bestStrategy: BacktestResult | null;
+
+  // News sentiment (optional — only when CryptoPanic/AV key is set)
+  newsSentiment?: NewsSentiment;
 }
 
 // ── Backtest helpers ──────────────────────────────────────────
@@ -150,15 +154,31 @@ function backtestBBBounce(closes: number[], bbs: BbPoint[]): BacktestResult {
 
 // ── Basic analysis for assets without OHLCV ──────────────────
 
-function buildBasicAnalysis(pair: string, base: string, currentPrice: number, change24h: number): AssetAnalysis {
+function buildBasicAnalysis(
+  pair: string,
+  base: string,
+  currentPrice: number,
+  change24h: number,
+  newsSentiment?: NewsSentiment,
+): AssetAnalysis {
   const momScore = change24h > 3 ? 1 : change24h > 1 ? 0.5 : change24h < -3 ? -1 : change24h < -1 ? -0.5 : 0;
   const signals: SignalItem[] = [{
     name: '24h Momentum',
     signal: momScore > 0 ? 'bullish' : momScore < 0 ? 'bearish' : 'neutral',
-    weight: 100, score: momScore,
+    weight: 70, score: momScore,
     detail: `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}% — ไม่มีข้อมูล OHLCV (ใช้ได้เฉพาะ Crypto/Gold)`,
   }];
-  const bullishScore = Math.round((momScore + 1) / 2 * 100);
+  if (newsSentiment) {
+    signals.push({
+      name: `News Sentiment (${newsSentiment.source})`,
+      signal: newsSentiment.score > 0.1 ? 'bullish' : newsSentiment.score < -0.1 ? 'bearish' : 'neutral',
+      weight: 30, score: newsSentiment.score,
+      detail: `${newsSentiment.label} — ${newsSentiment.articles} articles`,
+    });
+  }
+  const totalWeight   = signals.reduce((s, sig) => s + sig.weight, 0);
+  const weightedScore = signals.reduce((s, sig) => s + sig.score * sig.weight, 0) / totalWeight;
+  const bullishScore  = Math.min(100, Math.max(0, Math.round((weightedScore + 1) / 2 * 100)));
   return {
     pair, base, currentPrice, change24h, analyzedAt: new Date(),
     hasOHLCV: false,
@@ -171,6 +191,7 @@ function buildBasicAnalysis(pair: string, base: string, currentPrice: number, ch
     confidence: 'Low',
     planDirection: null, suggestedEntry: null, suggestedSL: null, suggestedTP: null, suggestedRR: null,
     backtestResults: [], bestStrategy: null,
+    newsSentiment,
   };
 }
 
@@ -180,12 +201,13 @@ export async function analyzeAsset(
   pair: string,
   currentPrice: number,
   change24h: number,
+  newsSentiment?: NewsSentiment,
 ): Promise<AssetAnalysis> {
   const base = pair.split('/')[0].toUpperCase().trim();
   const assetType = detectAssetType(pair);
   const hasOHLCV = assetType === 'crypto' || assetType === 'gold';
 
-  if (!hasOHLCV) return buildBasicAnalysis(pair, base, currentPrice, change24h);
+  if (!hasOHLCV) return buildBasicAnalysis(pair, base, currentPrice, change24h, newsSentiment);
 
   // ── Fetch 30 days of 4h OHLCV candles ────────────────────────
   let candles: { time: number; open: number; high: number; low: number; close: number }[] = [];
@@ -280,6 +302,16 @@ export async function analyzeAsset(
       detail: `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}% in 24h` });
   }
 
+  // 7. News Sentiment (weight 10 — optional)
+  if (newsSentiment) {
+    signals.push({
+      name: `News Sentiment (${newsSentiment.source})`,
+      signal: newsSentiment.score > 0.1 ? 'bullish' : newsSentiment.score < -0.1 ? 'bearish' : 'neutral',
+      weight: 10, score: newsSentiment.score,
+      detail: `${newsSentiment.label} — ${newsSentiment.articles} articles`,
+    });
+  }
+
   // ── Aggregate score ───────────────────────────────────────────
   const totalWeight  = signals.reduce((s, sig) => s + sig.weight, 0);
   const weightedScore = signals.reduce((s, sig) => s + sig.score * sig.weight, 0) / totalWeight;
@@ -337,5 +369,6 @@ export async function analyzeAsset(
     signals, bullishScore, direction, confidence,
     planDirection, suggestedEntry, suggestedSL, suggestedTP, suggestedRR,
     backtestResults, bestStrategy,
+    newsSentiment,
   };
 }
