@@ -2,21 +2,23 @@ import { useEffect, useState } from 'react';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Project } from '../types';
-import { Plus, FolderKanban, CheckCircle2 } from 'lucide-react';
+import { Plus, FolderKanban, CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import CustomSelect from '../components/CustomSelect';
 
 const UID = 'demo-user';
 
 const statusColors: Record<string, { bg: string; text: string }> = {
-  Active:      { bg: '#22c55e22', text: '#22c55e' },
-  Planning:    { bg: '#6366f122', text: '#818cf8' },
-  'On Hold':   { bg: '#f59e0b22', text: '#f59e0b' },
-  Completed:   { bg: '#64748b22', text: '#64748b' },
+  Active:    { bg: '#22c55e22', text: '#22c55e' },
+  Planning:  { bg: '#6366f122', text: '#818cf8' },
+  'On Hold': { bg: '#f59e0b22', text: '#f59e0b' },
+  Completed: { bg: '#64748b22', text: '#64748b' },
 };
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading]   = useState(false);
   const [form, setForm]         = useState({ title: '', category: '', status: 'Planning', due: '', tasks: '0', completedTasks: '0' });
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export default function ProjectsPage() {
     if (!form.title.trim()) return toast.error('กรอกชื่อโปรเจกต์');
     const tasks = +form.tasks || 0;
     const completedTasks = +form.completedTasks || 0;
+    setLoading(true);
     try {
       await addDoc(collection(db, 'projects'), {
         ...form,
@@ -41,7 +44,16 @@ export default function ProjectsPage() {
       setShowForm(false);
       toast.success('เพิ่มโปรเจกต์แล้ว');
     } catch { toast.error('บันทึกไม่สำเร็จ — ตรวจสอบ Firestore'); }
+    finally { setLoading(false); }
   };
+
+  const inputStyle = {
+    background: 'var(--color-bg)',
+    color: 'var(--color-text)',
+    border: '1px solid var(--color-border)',
+  };
+  const focusBorder = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = '1px solid var(--color-accent)');
+  const blurBorder  = (e: React.FocusEvent<HTMLInputElement>) => (e.currentTarget.style.border = '1px solid var(--color-border)');
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -50,9 +62,11 @@ export default function ProjectsPage() {
           <h1 className="text-xl font-bold" style={{ color: 'var(--color-text)' }}>Projects</h1>
           <p className="text-sm" style={{ color: 'var(--color-muted)' }}>{projects.length} projects</p>
         </div>
-        <button onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
-          style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 active:scale-95 hover:brightness-110"
+          style={{ background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+        >
           <Plus size={15} /> New Project
         </button>
       </div>
@@ -63,46 +77,80 @@ export default function ProjectsPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Project Name</label>
-              <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                placeholder="My Project..." className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              <input
+                value={form.title}
+                onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
+                placeholder="My Project..."
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
+                style={inputStyle} onFocus={focusBorder} onBlur={blurBorder}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Category</label>
-              <input value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                placeholder="Tech, Business..." className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              <input
+                value={form.category}
+                onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                placeholder="Tech, Business..."
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
+                style={inputStyle} onFocus={focusBorder} onBlur={blurBorder}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Status</label>
-              <select value={form.status} onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}>
-                <option>Planning</option><option>Active</option><option>On Hold</option><option>Completed</option>
-              </select>
+              <CustomSelect
+                value={form.status}
+                onChange={v => setForm(p => ({ ...p, status: v }))}
+                options={['Planning', 'Active', 'On Hold', 'Completed']}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Total Tasks</label>
-              <input type="number" value={form.tasks} onChange={e => setForm(p => ({ ...p, tasks: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              <input
+                type="number"
+                value={form.tasks}
+                onChange={e => setForm(p => ({ ...p, tasks: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
+                style={inputStyle} onFocus={focusBorder} onBlur={blurBorder}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Completed Tasks</label>
-              <input type="number" value={form.completedTasks} onChange={e => setForm(p => ({ ...p, completedTasks: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              <input
+                type="number"
+                value={form.completedTasks}
+                onChange={e => setForm(p => ({ ...p, completedTasks: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
+                style={inputStyle} onFocus={focusBorder} onBlur={blurBorder}
+              />
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Due Date</label>
-              <input type="date" value={form.due} onChange={e => setForm(p => ({ ...p, due: e.target.value }))}
-                className="w-full px-3 py-2 rounded-lg text-sm outline-none"
-                style={{ background: 'var(--color-bg)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }} />
+              <input
+                type="date"
+                value={form.due}
+                onChange={e => setForm(p => ({ ...p, due: e.target.value }))}
+                className="w-full px-3 py-2 rounded-lg text-sm outline-none transition-all duration-150"
+                style={inputStyle} onFocus={focusBorder} onBlur={blurBorder}
+              />
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={addProject} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ background: 'var(--color-accent)' }}>Save</button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm" style={{ color: 'var(--color-muted)' }}>Cancel</button>
+            <button
+              onClick={addProject}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all duration-150 active:scale-95 hover:brightness-110 disabled:opacity-60"
+              style={{ background: 'var(--color-accent)' }}
+            >
+              {loading && <Loader2 size={14} className="animate-spin" />}
+              Save
+            </button>
+            <button
+              onClick={() => setShowForm(false)}
+              className="px-4 py-2 rounded-lg text-sm transition-all duration-150 active:scale-95 hover:brightness-110"
+              style={{ color: 'var(--color-muted)' }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
@@ -128,7 +176,6 @@ export default function ProjectsPage() {
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.bg, color: c.text }}>{p.status}</span>
                   </div>
                 </div>
-                {/* Progress bar */}
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs" style={{ color: 'var(--color-muted)' }}>
                     <span className="flex items-center gap-1"><CheckCircle2 size={11} />{p.completedTasks}/{p.tasks} tasks</span>
