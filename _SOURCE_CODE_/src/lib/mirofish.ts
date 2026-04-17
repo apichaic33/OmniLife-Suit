@@ -1,6 +1,8 @@
 // MiroFish API Client
 // Connects OmniLife Suit to MiroFish backend at localhost:5001
+// On production (non-localhost), all calls return offline/empty gracefully.
 
+const IS_LOCAL = typeof window !== 'undefined' && window.location.hostname === 'localhost';
 const MIROFISH_BASE = 'http://localhost:5001';
 
 export interface MiroFishProject {
@@ -26,6 +28,7 @@ export interface ReportResult {
 
 // Check if MiroFish backend is reachable
 export async function checkMiroFishHealth(): Promise<boolean> {
+  if (!IS_LOCAL) return false;
   try {
     const res = await fetch(`${MIROFISH_BASE}/api/simulation/history?limit=1`, {
       signal: AbortSignal.timeout(3000),
@@ -42,6 +45,7 @@ export async function uploadSeed(
   projectName: string,
   predictionRequest: string
 ): Promise<{ project_id: string; graph_id: string }> {
+  if (!IS_LOCAL) throw new Error('MiroFish only available on localhost');
   const blob = new Blob([seedText], { type: 'text/markdown' });
   const formData = new FormData();
   formData.append('file', blob, 'seed.md');
@@ -58,6 +62,7 @@ export async function uploadSeed(
 
 // Get graph build status
 export async function getGraphStatus(projectId: string): Promise<{ status: string; graph_info?: any }> {
+  if (!IS_LOCAL) throw new Error('MiroFish only available on localhost');
   const res = await fetch(`${MIROFISH_BASE}/api/graph/status/${projectId}`);
   if (!res.ok) throw new Error(`Status check failed: ${res.status}`);
   return res.json();
@@ -65,6 +70,7 @@ export async function getGraphStatus(projectId: string): Promise<{ status: strin
 
 // Start simulation
 export async function startSimulation(projectId: string, graphId: string): Promise<SimulationStatus> {
+  if (!IS_LOCAL) throw new Error('MiroFish only available on localhost');
   const res = await fetch(`${MIROFISH_BASE}/api/simulation/start`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -76,6 +82,7 @@ export async function startSimulation(projectId: string, graphId: string): Promi
 
 // Get simulation status
 export async function getSimulationStatus(simulationId: string): Promise<SimulationStatus> {
+  if (!IS_LOCAL) throw new Error('MiroFish only available on localhost');
   const res = await fetch(`${MIROFISH_BASE}/api/simulation/status/${simulationId}`);
   if (!res.ok) throw new Error(`Simulation status failed: ${res.status}`);
   return res.json();
@@ -83,6 +90,7 @@ export async function getSimulationStatus(simulationId: string): Promise<Simulat
 
 // Get simulation history
 export async function getSimulationHistory(limit = 10): Promise<any[]> {
+  if (!IS_LOCAL) return [];
   const res = await fetch(`${MIROFISH_BASE}/api/simulation/history?limit=${limit}`);
   if (!res.ok) return [];
   const data = await res.json();
@@ -91,6 +99,7 @@ export async function getSimulationHistory(limit = 10): Promise<any[]> {
 
 // Generate report
 export async function generateReport(projectId: string, simulationId: string): Promise<ReportResult> {
+  if (!IS_LOCAL) throw new Error('MiroFish only available on localhost');
   const res = await fetch(`${MIROFISH_BASE}/api/report/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
