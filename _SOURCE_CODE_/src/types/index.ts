@@ -38,6 +38,7 @@ export interface Debt {
   id?: string;
   title: string;
   type: 'Mortgage' | 'Car Loan' | 'Credit Card' | 'Personal Loan' | 'Installment' | 'Other';
+  interestType?: 'reducing' | 'flat';
   totalAmount: number;
   remainingBalance: number;
   interestRate: number;

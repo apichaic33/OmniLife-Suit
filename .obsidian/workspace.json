@@ -4,17 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "7bf66c09a05a28e9",
+        "id": "d841dca49f4faadf",
         "type": "tabs",
         "children": [
           {
-            "id": "5081e6e35efff72c",
+            "id": "e89a9c166269d672",
             "type": "leaf",
             "state": {
-              "type": "graph",
+              "type": "empty",
               "state": {},
-              "icon": "lucide-git-fork",
-              "title": "มุมมองกราฟ"
+              "icon": "lucide-file",
+              "title": "แท็บใหม่"
             }
           }
         ]
@@ -179,8 +179,15 @@
       "bases:สร้างฐานใหม่": false
     }
   },
-  "active": "5081e6e35efff72c",
+  "active": "e89a9c166269d672",
   "lastOpenFiles": [
+    "_SOURCE_CODE_/src/components/CustomSelect.tsx",
+    "raw/MiroFish-main/MiroFish-main/node_modules/color-convert/README.md",
+    "_SOURCE_CODE_/node_modules/qs/LICENSE.md",
+    "raw/MiroFish-main/MiroFish-main/frontend/node_modules/@babel/types/README.md",
+    "raw/MiroFish-main/MiroFish-main/frontend/node_modules/d3-hierarchy/README.md",
+    "_SOURCE_CODE_/src/pages/AnalyticsPage.tsx",
+    "_SOURCE_CODE_/src/lib/indicators.ts",
     "_SOURCE_CODE_/src/lib/market.ts",
     "_SOURCE_CODE_/dist/index.js",
     "_SOURCE_CODE_/dist/index.html",
@@ -193,9 +200,6 @@
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/component.json",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/README.md",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/CHANGELOG.md",
-    "_SOURCE_CODE_/node_modules/node-fetch/@types/index.d.ts",
-    "_SOURCE_CODE_/node_modules/node-fetch/@types",
-    "_SOURCE_CODE_/node_modules/motion/mini/package.json",
     "_SOURCE_CODE_/node_modules/body-parser/node_modules/debug/CHANGELOG.md",
     "_SOURCE_CODE_/node_modules/vite/node_modules/@esbuild/darwin-x64/README.md",
     "_SOURCE_CODE_/node_modules/finalhandler/node_modules/debug/README.md",
@@ -213,10 +217,6 @@
     "_SOURCE_CODE_/node_modules/object-inspect/CHANGELOG.md",
     "_SOURCE_CODE_/node_modules/emoji-regex/README.md",
     "_SOURCE_CODE_/node_modules/side-channel-map/README.md",
-    "_SOURCE_CODE_/node_modules/react/README.md",
-    "_SOURCE_CODE_/node_modules/recharts/AGENTS.md",
-    "_SOURCE_CODE_/node_modules/recharts/CONTRIBUTING.md",
-    "_SOURCE_CODE_/node_modules/recharts/README.md",
     "_SOURCE_CODE_/node_modules/date-fns/docs/logo.svg",
     "_SOURCE_CODE_/node_modules/date-fns/docs/logotype.svg",
     "raw/MiroFish-main/MiroFish-main/node_modules/concurrently/docs/demo.gif",

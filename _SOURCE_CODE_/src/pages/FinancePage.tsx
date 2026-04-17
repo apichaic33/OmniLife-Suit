@@ -17,11 +17,32 @@ import { toast } from 'sonner';
 const UID = 'demo-user';
 
 /* ── Debt amortization helpers ── */
-const monthlyInterest = (remaining: number, annualRate: number) =>
-  remaining * (annualRate / 100 / 12);
+// reducing balance (ลดต้นลดดอก): interest shrinks as balance falls
+// flat rate       (คิดดอกเบี้ยแบบคงต้น): interest fixed on original principal — used by most Thai digital lenders
+const monthlyInterest = (
+  remaining: number,
+  annualRate: number,
+  interestType: 'reducing' | 'flat' = 'reducing',
+  totalAmount?: number,
+) =>
+  interestType === 'flat'
+    ? (totalAmount ?? remaining) * (annualRate / 100) * 30 / 365
+    : remaining * (annualRate / 100 / 12);
 
-const calcPayoffMonths = (remaining: number, payment: number, annualRate: number): number => {
+const calcPayoffMonths = (
+  remaining: number,
+  payment: number,
+  annualRate: number,
+  interestType: 'reducing' | 'flat' = 'reducing',
+  totalAmount?: number,
+): number => {
   if (payment <= 0 || remaining <= 0) return 0;
+  if (interestType === 'flat') {
+    const fixedInterest = (totalAmount ?? remaining) * (annualRate / 100) * 30 / 365;
+    const principalPerMonth = payment - fixedInterest;
+    if (principalPerMonth <= 0) return Infinity;
+    return Math.ceil(remaining / principalPerMonth);
+  }
   const r = annualRate / 100 / 12;
   if (r === 0) return Math.ceil(remaining / payment);
   if (payment <= remaining * r) return Infinity; // payment doesn't cover interest
@@ -58,6 +79,7 @@ const defTx = {
 };
 const defDebt = {
   title: '', type: 'Personal Loan' as Debt['type'],
+  interestType: 'reducing' as 'reducing' | 'flat',
   totalAmount: '' as any, remainingBalance: '' as any,
   interestRate: '' as any, monthlyPayment: '' as any, dueDate: '',
 };
@@ -127,7 +149,7 @@ export default function FinancePage() {
         if (txForm.debtId && txForm.type === 'expense') {
           const debt = debts.find(d => d.id === txForm.debtId);
           if (debt) {
-            const interest       = monthlyInterest(debt.remainingBalance, debt.interestRate);
+            const interest       = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
             const principal      = Math.max(0, amount - interest);
             const newBalance     = Math.max(0, debt.remainingBalance - principal);
             await updateDoc(doc(db, 'debts', txForm.debtId), { remainingBalance: newBalance });
@@ -155,7 +177,7 @@ export default function FinancePage() {
       if (t.debtId && t.type === 'expense') {
         const debt = debts.find(d => d.id === t.debtId);
         if (debt) {
-          const interest   = monthlyInterest(debt.remainingBalance, debt.interestRate);
+          const interest   = monthlyInterest(debt.remainingBalance, debt.interestRate, debt.interestType ?? 'reducing', debt.totalAmount);
           const principal  = Math.max(0, t.amount - interest);
           const restored   = debt.remainingBalance + principal;
           await updateDoc(doc(db, 'debts', t.debtId), { remainingBalance: restored });
@@ -170,7 +192,7 @@ export default function FinancePage() {
     if (!debtForm.title.trim()) return toast.error('กรอกชื่อหนี้');
     setDebtLoading(true);
     try {
-      const data = { ...debtForm, totalAmount: +debtForm.totalAmount, remainingBalance: +debtForm.remainingBalance, interestRate: +debtForm.interestRate, monthlyPayment: +debtForm.monthlyPayment, uid: UID };
+      const data = { ...debtForm, totalAmount: +debtForm.totalAmount, remainingBalance: +debtForm.remainingBalance, interestRate: +debtForm.interestRate, monthlyPayment: +debtForm.monthlyPayment, interestType: debtForm.interestType, uid: UID };
       if (editDebtId) { await updateDoc(doc(db, 'debts', editDebtId), data); toast.success('แก้ไขแล้ว'); }
       else { await addDoc(collection(db, 'debts'), { ...data, createdAt: serverTimestamp() }); toast.success('เพิ่มหนี้แล้ว'); }
       setDebtForm({ ...defDebt }); setShowDebtForm(false); setEditDebtId(null);
@@ -178,7 +200,7 @@ export default function FinancePage() {
     finally { setDebtLoading(false); }
   };
   const editDebt = (d: Debt) => {
-    setDebtForm({ title: d.title, type: d.type, totalAmount: d.totalAmount as any, remainingBalance: d.remainingBalance as any, interestRate: d.interestRate as any, monthlyPayment: d.monthlyPayment as any, dueDate: d.dueDate });
+    setDebtForm({ title: d.title, type: d.type, interestType: d.interestType ?? 'reducing', totalAmount: d.totalAmount as any, remainingBalance: d.remainingBalance as any, interestRate: d.interestRate as any, monthlyPayment: d.monthlyPayment as any, dueDate: d.dueDate });
     setEditDebtId(d.id!); setShowDebtForm(true); setTab('debts');
   };
   const deleteDebt = async (d: Debt) => {
@@ -427,6 +449,14 @@ export default function FinancePage() {
                     options={['Mortgage', 'Car Loan', 'Credit Card', 'Personal Loan', 'Installment', 'Other']} />
                 </div>
                 <div>
+                  <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>วิธีคิดดอกเบี้ย</label>
+                  <CustomSelect value={debtForm.interestType} onChange={v => setDebtForm(p => ({ ...p, interestType: v as any }))}
+                    options={[
+                      { value: 'reducing', label: 'ลดต้นลดดอก (Reducing Balance)' },
+                      { value: 'flat',     label: 'คงต้น (Flat Rate) — P×r×30/365' },
+                    ]} />
+                </div>
+                <div>
                   <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>วงเงินทั้งหมด (฿)</label>
                   <input type="number" value={debtForm.totalAmount} onChange={e => setDebtForm(p => ({ ...p, totalAmount: e.target.value as any }))}
                     placeholder="0" className={inputCls} style={inputStyle} onFocus={onFocus} onBlur={onBlur} />
@@ -472,9 +502,10 @@ export default function FinancePage() {
               const paid       = debtPaid(d.id!);
               const paidPct    = d.totalAmount > 0 ? Math.min(100, Math.round((1 - d.remainingBalance / d.totalAmount) * 100)) : 0;
               const linkedTxs  = transactions.filter(t => t.debtId === d.id);
-              const interest   = monthlyInterest(d.remainingBalance, d.interestRate);
+              const iType      = d.interestType ?? 'reducing';
+              const interest   = monthlyInterest(d.remainingBalance, d.interestRate, iType, d.totalAmount);
               const principal  = Math.max(0, d.monthlyPayment - interest);
-              const months     = calcPayoffMonths(d.remainingBalance, d.monthlyPayment, d.interestRate);
+              const months     = calcPayoffMonths(d.remainingBalance, d.monthlyPayment, d.interestRate, iType, d.totalAmount);
               return (
                 <div key={d.id} className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                   {/* Header */}
@@ -482,6 +513,10 @@ export default function FinancePage() {
                     <div>
                       <span className="font-medium" style={{ color: 'var(--color-text)' }}>{d.title}</span>
                       <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--color-border)', color: 'var(--color-muted)' }}>{d.type}</span>
+                      <span className="ml-1 text-xs px-2 py-0.5 rounded-full"
+                        style={{ background: iType === 'flat' ? '#f59e0b22' : '#6366f122', color: iType === 'flat' ? '#f59e0b' : '#818cf8' }}>
+                        {iType === 'flat' ? 'คงต้น' : 'ลดต้นลดดอก'}
+                      </span>
                     </div>
                     <div className="flex gap-1">
                       {/* Quick pay button */}
@@ -521,6 +556,9 @@ export default function FinancePage() {
                     <div className="rounded-lg p-2" style={{ background: '#ef444411' }}>
                       <div style={{ color: 'var(--color-muted)' }}>ดอกเบี้ย/เดือน</div>
                       <div className="font-semibold mt-0.5" style={{ color: '#ef4444' }}>฿{interest.toFixed(0)}</div>
+                      {iType === 'flat' && (
+                        <div style={{ color: 'var(--color-muted)', fontSize: '10px', marginTop: 2 }}>P×{d.interestRate}%×30/365</div>
+                      )}
                     </div>
                     <div className="rounded-lg p-2" style={{ background: '#22c55e11' }}>
                       <div style={{ color: 'var(--color-muted)' }}>ตัดเงินต้น/เดือน</div>
