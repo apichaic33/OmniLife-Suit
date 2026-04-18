@@ -11,6 +11,10 @@ import MiroFishSimulator from '../components/MiroFishSimulator';
 import CustomSelect from '../components/CustomSelect';
 
 const DEMO_UID = 'demo-user';
+const SCANNER_KEY = 'omnilife_scanner_favorites';
+const loadScannerPairs = (): string[] => {
+  try { return JSON.parse(localStorage.getItem(SCANNER_KEY) || '[]'); } catch { return []; }
+};
 
 export default function TradePage() {
   const [trades, setTrades]           = useState<Trade[]>([]);
@@ -34,6 +38,7 @@ export default function TradePage() {
   const [avKey,      setAvKeyState]   = useState(getAVKey);
   const [showAvInput, setShowAvInput] = useState(false);
   const [editTradeId, setEditTradeId] = useState<string | null>(null);
+  const [scannerPairs] = useState<string[]>(loadScannerPairs);
 
   const saveAvKey = (k: string) => { setAVKey(k); setAvKeyState(k); setShowAvInput(false); };
 
@@ -284,6 +289,32 @@ export default function TradePage() {
           <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
             {editTradeId ? 'แก้ไข Trade' : 'เพิ่ม Trade ใหม่'}
           </p>
+          {/* Scanner Watchlist quick-select */}
+          {scannerPairs.length > 0 && (
+            <div>
+              <p className="text-xs mb-1.5" style={{ color: 'var(--color-muted)' }}>
+                📡 Scanner Watchlist — คลิกเพื่อเลือก
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {scannerPairs.map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setForm(prev => ({ ...prev, pair: p }))}
+                    className="px-2.5 py-1 rounded-lg text-xs font-medium border transition-all active:scale-95 hover:brightness-110"
+                    style={{
+                      background: form.pair === p ? 'var(--color-accent)' : 'var(--color-bg)',
+                      color: form.pair === p ? '#fff' : 'var(--color-text)',
+                      borderColor: form.pair === p ? 'var(--color-accent)' : 'var(--color-border)',
+                    }}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>Pair / Symbol</label>

@@ -14,11 +14,15 @@ import { fetchNewsSentiment, getCPKey, setCPKey, type NewsSentiment } from '../l
 import { getGeminiKey, setGeminiKey, getScannerSummary } from '../lib/gemini';
 
 // ── Persisted watchlist in localStorage ─────────────────────
-const STORAGE_KEY = 'omnilife_scanner_favorites';
+export const SCANNER_STORAGE_KEY = 'omnilife_scanner_favorites';
 const loadFavorites = (): string[] => {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch { return []; }
+  try { return JSON.parse(localStorage.getItem(SCANNER_STORAGE_KEY) || '[]'); } catch { return []; }
 };
-const saveFavorites = (pairs: string[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(pairs));
+const saveFavorites = (pairs: string[]) => localStorage.setItem(SCANNER_STORAGE_KEY, JSON.stringify(pairs));
+
+// ── Helper: look up price by pair (fetchPrices keys by base ticker) ──
+const getPrice = (prices: Record<string, PriceData>, pair: string) =>
+  prices[pair.split('/')[0].toUpperCase()];
 
 // ── Helpers ──────────────────────────────────────────────────
 const fmt = (n: number | null | undefined, dec = 2): string =>
@@ -497,7 +501,7 @@ export default function ScannerPage() {
   };
 
   const handleAnalyze = async (pair: string) => {
-    const meta = prices[pair];
+    const meta = getPrice(prices, pair);
     if (!meta) { toast.error('ยังไม่มีราคา — กด Refresh ก่อน'); return; }
     setActivePair(pair);
     setAnalysis(null);
@@ -580,7 +584,9 @@ export default function ScannerPage() {
             </div>
             <div>
               <label className="block text-xs mb-1" style={{ color: 'var(--color-muted)' }}>
-                CryptoPanic API Key — <a href="https://cryptopanic.com/developers/api/" target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>cryptopanic.com</a>
+                CryptoPanic API Key
+                <span className="ml-1 px-1.5 py-0.5 rounded text-xs" style={{ background: '#f59e0b22', color: '#f59e0b' }}>Paid Plan Only</span>
+                {' '}<a href="https://cryptopanic.com/developers/api/" target="_blank" rel="noreferrer" style={{ color: '#a78bfa' }}>cryptopanic.com</a>
               </label>
               <input
                 type="password"
@@ -676,7 +682,9 @@ export default function ScannerPage() {
               <WatchCard
                 key={pair}
                 pair={pair}
-                meta={prices[pair] ? { price: prices[pair].usd, change24h: prices[pair].usd_24h_change } : { loading: loadingPrices && !prices[pair] }}
+                meta={getPrice(prices, pair)
+                  ? { price: getPrice(prices, pair)!.usd, change24h: getPrice(prices, pair)!.usd_24h_change }
+                  : { loading: loadingPrices && !getPrice(prices, pair) }}
                 isActive={activePair === pair}
                 onSelect={() => handleAnalyze(pair)}
                 onRemove={() => removeFavorite(pair)}

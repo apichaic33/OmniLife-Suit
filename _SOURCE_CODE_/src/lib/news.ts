@@ -1,7 +1,7 @@
 // ============================================================
 // News Sentiment Engine
-//  • CryptoPanic — Crypto news sentiment  (free, key required)
-//  • Alpha Vantage NEWS_SENTIMENT — Stocks (reuses AV key)
+//  • CryptoPanic — Crypto news sentiment  (PAID PLAN required)
+//  • Alpha Vantage NEWS_SENTIMENT — Stocks (reuses AV key, free tier)
 // ============================================================
 
 const CP_BASE = 'https://cryptopanic.com/api/v1';
