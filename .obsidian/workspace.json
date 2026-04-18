@@ -11,10 +11,10 @@
             "id": "e89a9c166269d672",
             "type": "leaf",
             "state": {
-              "type": "empty",
+              "type": "graph",
               "state": {},
-              "icon": "lucide-file",
-              "title": "แท็บใหม่"
+              "icon": "lucide-git-fork",
+              "title": "มุมมองกราฟ"
             }
           }
         ]
@@ -181,6 +181,11 @@
   },
   "active": "e89a9c166269d672",
   "lastOpenFiles": [
+    "_SOURCE_CODE_/src/lib/news.ts",
+    "_SOURCE_CODE_/src/lib/gemini.ts",
+    "raw/MiroFish-main/MiroFish-main/node_modules/emoji-regex/README.md",
+    "_SOURCE_CODE_/src/pages/ScannerPage.tsx",
+    "_SOURCE_CODE_/src/lib/analysis.ts",
     "_SOURCE_CODE_/src/components/CustomSelect.tsx",
     "raw/MiroFish-main/MiroFish-main/node_modules/color-convert/README.md",
     "_SOURCE_CODE_/node_modules/qs/LICENSE.md",
@@ -192,12 +197,8 @@
     "_SOURCE_CODE_/dist/index.js",
     "_SOURCE_CODE_/dist/index.html",
     "_SOURCE_CODE_/dist/index.css",
-    "_SOURCE_CODE_/dist",
-    "_SOURCE_CODE_/src/components/ErrorBoundary.tsx",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/readme.md",
-    "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/index.js",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/node_modules/ms/license.md",
-    "_SOURCE_CODE_/node_modules/send/node_modules/debug/component.json",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/README.md",
     "_SOURCE_CODE_/node_modules/send/node_modules/debug/CHANGELOG.md",
     "_SOURCE_CODE_/node_modules/body-parser/node_modules/debug/CHANGELOG.md",
@@ -216,7 +217,6 @@
     "_SOURCE_CODE_/node_modules/on-finished/HISTORY.md",
     "_SOURCE_CODE_/node_modules/object-inspect/CHANGELOG.md",
     "_SOURCE_CODE_/node_modules/emoji-regex/README.md",
-    "_SOURCE_CODE_/node_modules/side-channel-map/README.md",
     "_SOURCE_CODE_/node_modules/date-fns/docs/logo.svg",
     "_SOURCE_CODE_/node_modules/date-fns/docs/logotype.svg",
     "raw/MiroFish-main/MiroFish-main/node_modules/concurrently/docs/demo.gif",
